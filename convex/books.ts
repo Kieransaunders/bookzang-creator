@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { api } from "./_generated/api";
 
 export const list = query({
   args: {
@@ -50,18 +51,30 @@ export const createFromFile = mutation({
     author: v.string(),
     fileId: v.id("_storage"),
     fileName: v.string(),
+    gutenbergId: v.optional(v.string()),
+    overrideDuplicate: v.optional(v.boolean()),
   },
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("books", {
-      title: args.title,
-      author: args.author,
-      gutenbergId: `file-${Date.now()}`, // Generate a unique ID for uploaded files
-      source: "upload",
-      status: "imported",
-      importedAt: Date.now(),
+  handler: async (ctx: any, args): Promise<any> => {
+    return await ctx.runMutation((api as any).intake.enqueueUpload, {
       fileId: args.fileId,
       fileName: args.fileName,
+      gutenbergId: args.gutenbergId,
+      title: args.title,
+      author: args.author,
+      overrideDuplicate: args.overrideDuplicate,
     });
+  },
+});
+
+export const byGutenbergId = query({
+  args: { gutenbergId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("books")
+      .withIndex("by_gutenberg_id", (q) =>
+        q.eq("gutenbergId", args.gutenbergId),
+      )
+      .first();
   },
 });
 

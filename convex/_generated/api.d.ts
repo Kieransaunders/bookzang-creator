@@ -12,6 +12,8 @@ import type * as auth from "../auth.js";
 import type * as books from "../books.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as intake from "../intake.js";
+import type * as intakeMetadata from "../intakeMetadata.js";
 import type * as jobs from "../jobs.js";
 import type * as router from "../router.js";
 import type * as templates from "../templates.js";
@@ -27,6 +29,8 @@ declare const fullApi: ApiFromModules<{
   books: typeof books;
   files: typeof files;
   http: typeof http;
+  intake: typeof intake;
+  intakeMetadata: typeof intakeMetadata;
   jobs: typeof jobs;
   router: typeof router;
   templates: typeof templates;
