@@ -105,25 +105,29 @@ const applicationTables = {
   // NOTE: Content is stored in Convex File Storage, not in database (1MB limit)
   cleanupOriginals: defineTable({
     bookId: v.id("books"),
-    fileId: v.id("_storage"),  // Reference to stored original file
+    fileId: v.optional(v.id("_storage")),  // Reference to stored original file
     capturedAt: v.number(),
     sourceFormat: v.union(v.literal("gutenberg_txt"), v.literal("markdown")),
-    sizeBytes: v.number(),  // Track original size
+    sizeBytes: v.optional(v.number()),  // Track original size
+    // DEPRECATED: content stored directly (removed due to 1MB limit)
+    content: v.optional(v.string()),
   })
     .index("by_book_id", ["bookId"]),
 
   cleanupRevisions: defineTable({
     bookId: v.id("books"),
     revisionNumber: v.number(),
-    fileId: v.id("_storage"),  // Reference to stored cleaned file
+    fileId: v.optional(v.id("_storage")),  // Reference to stored cleaned file
     isDeterministic: v.boolean(),
     isAiAssisted: v.boolean(),
     preserveArchaic: v.boolean(),
     createdAt: v.number(),
     createdBy: v.union(v.literal("system"), v.literal("ai"), v.literal("user")),
     parentRevisionId: v.optional(v.id("cleanupRevisions")),
-    sizeBytes: v.number(),  // Track cleaned size
+    sizeBytes: v.optional(v.number()),  // Track cleaned size
     chapterIds: v.optional(v.array(v.id("cleanupChapters"))),  // References to chapter records
+    // DEPRECATED: content stored directly (removed due to 1MB limit)
+    content: v.optional(v.string()),
   })
     .index("by_book_id", ["bookId"])
     .index("by_book_id_revision", ["bookId", "revisionNumber"]),
@@ -143,13 +147,15 @@ const applicationTables = {
       v.literal("appendix"),
       v.literal("body"),
     ),
-    fileId: v.id("_storage"),  // Reference to stored chapter content file
+    fileId: v.optional(v.id("_storage")),  // Reference to stored chapter content file
     startOffset: v.number(),
     endOffset: v.number(),
     detectedHeading: v.optional(v.string()),
     isUserConfirmed: v.boolean(),
     createdAt: v.number(),
-    sizeBytes: v.number(),  // Track chapter content size
+    sizeBytes: v.optional(v.number()),  // Track chapter content size
+    // DEPRECATED: content stored directly (removed due to 1MB limit)
+    content: v.optional(v.string()),
   })
     .index("by_book_id", ["bookId"])
     .index("by_revision_id", ["revisionId"])

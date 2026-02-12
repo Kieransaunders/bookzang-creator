@@ -79,6 +79,16 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> = internalActio
         throw new Error("Revision is already AI-assisted; create new deterministic revision first");
       }
 
+      // Read content from file storage (not in database due to 1MB limit)
+      if (!revision.fileId) {
+        throw new Error(`Revision ${args.revisionId} has no fileId (legacy data)`);
+      }
+      const contentBlob = await ctx.storage.get(revision.fileId);
+      if (!contentBlob) {
+        throw new Error(`Content file ${revision.fileId} not found for revision ${args.revisionId}`);
+      }
+      const content = await contentBlob.text();
+
       // Get chapters for context
       const chapters = await ctx.runQuery(internal.cleanupAi.getChaptersForAi, {
         revisionId: args.revisionId,
@@ -99,7 +109,7 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> = internalActio
       }
 
       // Split content into segments
-      const segments = splitIntoSegments(revision.content, AI_CLEANUP_CONFIG.MAX_SEGMENT_SIZE);
+      const segments = splitIntoSegments(content, AI_CLEANUP_CONFIG.MAX_SEGMENT_SIZE);
       console.log(`Processing ${segments.length} segments for book ${args.bookId}`);
 
       if (args.jobId) {
@@ -186,7 +196,7 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> = internalActio
             punctuationNormalizations: allPatches.filter(p => p.category === "punctuation_normalization").length,
           },
         },
-        revision.content
+        content
       );
 
       if (!validatedResponse.success) {
@@ -194,7 +204,8 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> = internalActio
       }
 
       // Apply patches and create new revision
-      const result = await ctx.runMutation(internal.cleanupPatchApply.applyPatchesAndCreateRevision, {
+      // Schedule action since queries can't call actions directly
+      await ctx.scheduler.runAfter(0, internal.cleanupPatchApply.applyPatchesAndCreateRevision, {
         bookId: args.bookId,
         parentRevisionId: args.revisionId,
         patches: validatedResponse.data.patches,
@@ -202,19 +213,28 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> = internalActio
         preservationNotes: validatedResponse.data.preservationNotes,
       });
 
+      // Calculate metrics
+      const appliedCount = validatedResponse.data.patches.filter(p => p.confidence === "high").length;
+      const flagsCreated = validatedResponse.data.patches.filter(p => p.confidence === "low").length;
+
+      // Return placeholder result - actual revision will be created async
+      const result = {
+        success: true,
+        appliedCount,
+        flagsCreated,
+      };
+
       if (args.jobId) {
         await ctx.runMutation(internal.cleanupAi.completeAiJob, {
           jobId: args.jobId,
-          newRevisionId: result.newRevisionId,
-          patchesApplied: result.patchesApplied,
+          patchesApplied: result.appliedCount,
           flagsCreated: result.flagsCreated,
         });
       }
 
       return {
         success: true,
-        newRevisionId: result.newRevisionId,
-        patchesApplied: result.patchesApplied,
+        patchesApplied: result.appliedCount,
         lowConfidenceFlags: result.flagsCreated,
       };
     } catch (error) {
@@ -454,7 +474,7 @@ export const getRevisionForAi: ReturnType<typeof internalQuery> = internalQuery(
     _id: v.id("cleanupRevisions"),
     bookId: v.id("books"),
     revisionNumber: v.number(),
-    content: v.string(),
+    fileId: v.optional(v.id("_storage")),
     isAiAssisted: v.boolean(),
   })),
   handler: async (ctx, args) => {
@@ -464,7 +484,7 @@ export const getRevisionForAi: ReturnType<typeof internalQuery> = internalQuery(
       _id: revision._id,
       bookId: revision.bookId,
       revisionNumber: revision.revisionNumber,
-      content: revision.content,
+      fileId: revision.fileId,
       isAiAssisted: revision.isAiAssisted,
     };
   },

@@ -4,8 +4,9 @@
  * Handles creation, resolution, and querying of cleanup review flags.
  */
 
-import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { v, type GenericId as Id } from "convex/values";
+import { internalMutation, internalQuery, internalAction, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 /**
  * Flag types for different cleanup ambiguities
@@ -307,9 +308,10 @@ export const createOcrChapterFlag = internalMutation({
 });
 
 /**
- * Internal mutation to promote an unlabeled break to a chapter
+ * Internal action to promote an unlabeled break to a chapter
+ * Uses file storage for content (not database - 1MB limit)
  */
-export const promoteBoundaryToChapter = internalMutation({
+export const promoteBoundaryToChapter = internalAction({
   args: {
     bookId: v.id("books"),
     revisionId: v.id("cleanupRevisions"),
@@ -326,39 +328,48 @@ export const promoteBoundaryToChapter = internalMutation({
     chapterNumber: v.number(),
   },
   returns: v.object({ chapterId: v.id("cleanupChapters") }),
-  handler: async (ctx, args) => {
-    // Get the revision to extract content around the boundary
-    const revision = await ctx.db.get(args.revisionId);
+  handler: async (ctx, args): Promise<{ chapterId: Id<"cleanupChapters"> }> => {
+    // Get the revision and flag via query
+    const revision = await ctx.runQuery(internal.cleanupFlags.getRevisionForChapter, {
+      revisionId: args.revisionId,
+    });
     if (!revision) {
       throw new Error(`Revision ${args.revisionId} not found`);
     }
 
-    const flag = await ctx.db.get(args.flagId);
+    const flag = await ctx.runQuery(internal.cleanupFlags.getFlag, {
+      flagId: args.flagId,
+    });
     if (!flag) {
       throw new Error(`Flag ${args.flagId} not found`);
     }
 
-    // Create the new chapter
-    const content = revision.content.slice(flag.startOffset, flag.endOffset + 1000);
-    const chapterId = await ctx.db.insert("cleanupChapters", {
+    // Read revision content from file storage
+    if (!revision.fileId) {
+      throw new Error(`Revision ${args.revisionId} has no fileId (legacy data)`);
+    }
+    const contentBlob = await ctx.storage.get(revision.fileId);
+    if (!contentBlob) {
+      throw new Error(`Content file ${revision.fileId} not found for revision ${args.revisionId}`);
+    }
+    const content = await contentBlob.text();
+
+    // Extract chapter content
+    const chapterContent = content.slice(flag.startOffset, flag.endOffset + 1000);
+    const chapterBlob = new Blob([chapterContent], { type: "text/plain" });
+    const chapterFileId = await ctx.storage.store(chapterBlob);
+
+    const chapterId = await ctx.runMutation(internal.cleanupFlags.createChapterRecord, {
       bookId: args.bookId,
       revisionId: args.revisionId,
+      flagId: args.flagId,
       chapterNumber: args.chapterNumber,
       title: args.title,
       type: args.type,
-      content,
+      fileId: chapterFileId,
       startOffset: flag.startOffset,
       endOffset: flag.endOffset + 1000,
-      detectedHeading: undefined,
-      isUserConfirmed: true,
-      createdAt: Date.now(),
-    });
-
-    // Update the flag
-    await ctx.db.patch(args.flagId, {
-      status: "confirmed",
-      chapterId,
-      resolvedAt: Date.now(),
+      sizeBytes: chapterBlob.size,
     });
 
     return { chapterId };
@@ -437,5 +448,93 @@ export const getUnresolvedFlagCount = query({
       total: flags.length,
       byType,
     };
+  },
+});
+
+
+
+/**
+ * Get revision metadata for chapter creation
+ */
+export const getRevisionForChapter = internalQuery({
+  args: {
+    revisionId: v.id("cleanupRevisions"),
+  },
+  returns: v.union(v.null(), v.object({
+    fileId: v.optional(v.id("_storage")),
+  })),
+  handler: async (ctx, args) => {
+    const revision = await ctx.db.get(args.revisionId);
+    if (!revision) return null;
+    return { fileId: revision.fileId };
+  },
+});
+
+/**
+ * Get flag details
+ */
+export const getFlag = internalQuery({
+  args: {
+    flagId: v.id("cleanupFlags"),
+  },
+  returns: v.union(v.null(), v.object({
+    startOffset: v.number(),
+    endOffset: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    const flag = await ctx.db.get(args.flagId);
+    if (!flag) return null;
+    return { startOffset: flag.startOffset, endOffset: flag.endOffset };
+  },
+});
+
+/**
+ * Create chapter record and update flag
+ */
+export const createChapterRecord = internalMutation({
+  args: {
+    bookId: v.id("books"),
+    revisionId: v.id("cleanupRevisions"),
+    flagId: v.id("cleanupFlags"),
+    chapterNumber: v.number(),
+    title: v.string(),
+    type: v.union(
+      v.literal("chapter"),
+      v.literal("preface"),
+      v.literal("introduction"),
+      v.literal("notes"),
+      v.literal("appendix"),
+      v.literal("body"),
+    ),
+    fileId: v.id("_storage"),
+    startOffset: v.number(),
+    endOffset: v.number(),
+    sizeBytes: v.number(),
+  },
+  returns: v.id("cleanupChapters"),
+  handler: async (ctx, args) => {
+    const chapterId = await ctx.db.insert("cleanupChapters", {
+      bookId: args.bookId,
+      revisionId: args.revisionId,
+      chapterNumber: args.chapterNumber,
+      title: args.title,
+      type: args.type,
+      fileId: args.fileId,
+      startOffset: args.startOffset,
+      endOffset: args.endOffset,
+      detectedHeading: undefined,
+      isUserConfirmed: true,
+      createdAt: Date.now(),
+      sizeBytes: args.sizeBytes,
+    });
+
+    // Update the flag
+    await ctx.db.patch(args.flagId, {
+      status: "confirmed",
+      chapterId,
+      resolvedAt: Date.now(),
+    });
+
+    return chapterId;
   },
 });

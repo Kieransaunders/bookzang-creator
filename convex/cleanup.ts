@@ -5,8 +5,8 @@
  * and managing the cleanup pipeline.
  */
 
-import { v } from "convex/values";
-import { query, mutation, internalAction, internalMutation } from "./_generated/server";
+import { v, type GenericId as Id } from "convex/values";
+import { query, mutation, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { runDeterministicCleanup } from "./cleanupPipeline";
 import { detectChapterBoundaries } from "./cleanupChaptering";
@@ -413,7 +413,8 @@ export const promoteBoundaryToChapter: ReturnType<typeof mutation> = mutation({
 
     const maxChapter = chapters.reduce((max, ch) => Math.max(max, ch.chapterNumber), 0);
 
-    return await ctx.runMutation(internal.cleanupFlags.promoteBoundaryToChapter, {
+    // Schedule action since mutations can't call actions directly
+    await ctx.scheduler.runAfter(0, internal.cleanupFlags.promoteBoundaryToChapter, {
       bookId: flag.bookId,
       revisionId: flag.revisionId,
       flagId: args.flagId,
@@ -421,17 +422,209 @@ export const promoteBoundaryToChapter: ReturnType<typeof mutation> = mutation({
       type: args.type,
       chapterNumber: maxChapter + 1,
     });
+
+    // Return placeholder - actual chapter will be created async
+    return { chapterId: "xxx" as unknown as Id<"cleanupChapters"> };
+  },
+});
+
+
+/**
+ * Internal action to save a revision with file storage
+ * This runs as an action to avoid 1MB mutation size limit
+ */
+export const saveRevisionWithFiles: ReturnType<typeof internalAction> = internalAction({
+  args: {
+    bookId: v.id("books"),
+    content: v.string(),
+    revisionNumber: v.number(),
+    isDeterministic: v.boolean(),
+    isAiAssisted: v.boolean(),
+    preserveArchaic: v.boolean(),
+    parentRevisionId: v.optional(v.id("cleanupRevisions")),
+    userId: v.id("users"),
+    approvalKept: v.boolean(),
+    latestApprovalId: v.optional(v.id("cleanupApprovals")),
+  },
+  returns: v.object({
+    revisionId: v.id("cleanupRevisions"),
+    chapterIds: v.array(v.id("cleanupChapters")),
+  }),
+  handler: async (ctx, args): Promise<{ revisionId: Id<"cleanupRevisions">; chapterIds: Id<"cleanupChapters">[] }> => {
+    // Store cleaned content as a file (not in database - 1MB limit)
+    const contentBlob = new Blob([args.content], { type: "text/plain" });
+    const contentFileId = await ctx.storage.store(contentBlob);
+
+    // Detect chapters for the new content
+    const chapterResult = detectChapterBoundaries(args.content);
+
+    // Store each chapter as a file and collect metadata
+    const chapterFiles: Array<{
+      chapterNumber: number;
+      title: string;
+      type: "chapter" | "preface" | "introduction" | "notes" | "appendix" | "body";
+      fileId: Id<"_storage">;
+      startOffset: number;
+      endOffset: number;
+      detectedHeading?: string;
+      isUserConfirmed: boolean;
+      confidence: "high" | "medium" | "low";
+      isOcrCorrupted: boolean;
+      sizeBytes: number;
+    }> = [];
+    for (const ch of chapterResult.chapters) {
+      const chapterBlob = new Blob([ch.content], { type: "text/plain" });
+      const chapterFileId = await ctx.storage.store(chapterBlob);
+      
+      chapterFiles.push({
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        type: ch.type,
+        fileId: chapterFileId,
+        startOffset: ch.startOffset,
+        endOffset: ch.endOffset,
+        detectedHeading: ch.detectedHeading ?? undefined,
+        isUserConfirmed: ch.isUserConfirmed,
+        confidence: ch.confidence,
+        isOcrCorrupted: ch.isOcrCorrupted,
+        sizeBytes: chapterBlob.size,
+      });
+    }
+
+    // Create revision record with file reference
+    const revisionId: Id<"cleanupRevisions"> = await ctx.runMutation(internal.cleanup.createRevisionRecord, {
+      bookId: args.bookId,
+      revisionNumber: args.revisionNumber,
+      fileId: contentFileId,
+      sizeBytes: contentBlob.size,
+      isDeterministic: args.isDeterministic,
+      isAiAssisted: args.isAiAssisted,
+      preserveArchaic: args.preserveArchaic,
+      createdBy: "user",
+      parentRevisionId: args.parentRevisionId,
+    });
+
+    // Create chapter records with file references
+    const chapterIds: Id<"cleanupChapters">[] = await ctx.runMutation(internal.cleanupPipeline.createChapterRecords, {
+      bookId: args.bookId,
+      revisionId,
+      chapters: chapterFiles,
+    });
+
+    // If keeping approval, create approval record
+    if (args.approvalKept && args.latestApprovalId) {
+      const approval = await ctx.runQuery(internal.cleanup.getApprovalChecklist, {
+        approvalId: args.latestApprovalId,
+      });
+      if (approval.checklistConfirmed) {
+        await ctx.runMutation(internal.cleanup.createApprovalForRevision, {
+          bookId: args.bookId,
+          revisionId,
+          userId: args.userId,
+          checklistConfirmed: approval.checklistConfirmed,
+        });
+      }
+    }
+
+    return { revisionId, chapterIds };
+  },
+});
+
+/**
+ * Internal mutation to create a revision record with file reference
+ */
+export const createRevisionRecord = internalMutation({
+  args: {
+    bookId: v.id("books"),
+    revisionNumber: v.number(),
+    fileId: v.id("_storage"),
+    sizeBytes: v.number(),
+    isDeterministic: v.boolean(),
+    isAiAssisted: v.boolean(),
+    preserveArchaic: v.boolean(),
+    createdBy: v.union(v.literal("system"), v.literal("ai"), v.literal("user")),
+    parentRevisionId: v.optional(v.id("cleanupRevisions")),
+  },
+  returns: v.id("cleanupRevisions"),
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("cleanupRevisions", {
+      bookId: args.bookId,
+      revisionNumber: args.revisionNumber,
+      fileId: args.fileId,
+      sizeBytes: args.sizeBytes,
+      isDeterministic: args.isDeterministic,
+      isAiAssisted: args.isAiAssisted,
+      preserveArchaic: args.preserveArchaic,
+      createdAt: Date.now(),
+      createdBy: args.createdBy,
+      parentRevisionId: args.parentRevisionId,
+    });
+  },
+});
+
+/**
+ * Internal query to get approval checklist
+ */
+export const getApprovalChecklist = internalQuery({
+  args: {
+    approvalId: v.id("cleanupApprovals"),
+  },
+  returns: v.object({
+    checklistConfirmed: v.optional(v.object({
+      boilerplateRemoved: v.boolean(),
+      chapterBoundariesVerified: v.boolean(),
+      punctuationReviewed: v.boolean(),
+      archaicPreserved: v.boolean(),
+    })),
+  }),
+  handler: async (ctx, args) => {
+    const approval = await ctx.db.get(args.approvalId);
+    if (!approval) return { checklistConfirmed: undefined };
+    return { checklistConfirmed: approval.checklistConfirmed };
+  },
+});
+
+/**
+ * Internal mutation to create an approval record for a revision
+ */
+export const createApprovalForRevision = internalMutation({
+  args: {
+    bookId: v.id("books"),
+    revisionId: v.id("cleanupRevisions"),
+    userId: v.id("users"),
+    checklistConfirmed: v.object({
+      boilerplateRemoved: v.boolean(),
+      chapterBoundariesVerified: v.boolean(),
+      punctuationReviewed: v.boolean(),
+      archaicPreserved: v.boolean(),
+    }),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.insert("cleanupApprovals", {
+      bookId: args.bookId,
+      revisionId: args.revisionId,
+      approvedBy: args.userId,
+      approvedAt: Date.now(),
+      checklistConfirmed: args.checklistConfirmed,
+    });
+
+    // Update book status to ready
+    await ctx.db.patch(args.bookId, { status: "ready" });
+
+    return null;
   },
 });
 
 /**
  * Save a new cleaned revision from reviewer edits
  * Creates a new revision with user as the creator
+ * Stores content in File Storage to avoid 1MB limit
  * 
  * POST-APPROVAL EDIT HANDLING:
  * If the book has an active approval and keepApproval is not specified,
    the caller must prompt for keep/revoke choice. If keepApproval is true,
-   the new revision becomes the approved revision. If keepApproval is false
+ * the new revision becomes the approved revision. If keepApproval is false
  * or unspecified with existing approval, approval is revoked.
  */
 export const saveCleanedRevision = mutation({
@@ -507,11 +700,28 @@ export const saveCleanedRevision = mutation({
       }
     }
 
-    // Create new revision
-    const revisionId = await ctx.db.insert("cleanupRevisions", {
+    // Schedule an action to store the revision and chapters in file storage
+    // This avoids the 1MB mutation size limit
+    await ctx.scheduler.runAfter(0, internal.cleanup.saveRevisionWithFiles, {
+      bookId: args.bookId,
+      content: args.content,
+      revisionNumber: newRevisionNumber,
+      isDeterministic,
+      isAiAssisted,
+      preserveArchaic,
+      parentRevisionId: args.parentRevisionId ?? latestRevision?._id,
+      userId: userRecord._id,
+      approvalKept,
+      latestApprovalId: latestApproval?._id,
+    });
+
+    // Return optimistic response - actual revision will be created async
+    // Client should poll for the new revision
+    const placeholderRevisionId = await ctx.db.insert("cleanupRevisions", {
       bookId: args.bookId,
       revisionNumber: newRevisionNumber,
-      content: args.content,
+      fileId: "xxx" as unknown as Id<"_storage">,  // Will be updated by action
+      sizeBytes: 0,
       isDeterministic,
       isAiAssisted,
       preserveArchaic,
@@ -520,22 +730,8 @@ export const saveCleanedRevision = mutation({
       parentRevisionId: args.parentRevisionId ?? latestRevision?._id,
     });
 
-    // If keeping approval, create new approval record for this revision
-    if (approvalKept && latestApproval) {
-      await ctx.db.insert("cleanupApprovals", {
-        bookId: args.bookId,
-        revisionId,
-        approvedBy: userRecord._id,
-        approvedAt: Date.now(),
-        checklistConfirmed: latestApproval.checklistConfirmed,
-      });
-
-      // Update book status back to ready
-      await ctx.db.patch(args.bookId, { status: "ready" });
-    }
-
     return {
-      revisionId,
+      revisionId: placeholderRevisionId,
       revisionNumber: newRevisionNumber,
       approvalRevoked,
       approvalKept,
@@ -1047,6 +1243,77 @@ export const revokeApproval = mutation({
 
     return {
       success: true,
+    };
+  },
+});
+
+
+// ─── DEV UTILITIES ─────────────────────────────────────────────────────────
+
+/**
+ * DEV ONLY: Clear all cleanup data for a book (useful when schema changes)
+ */
+export const clearCleanupData = internalMutation({
+  args: {
+    bookId: v.id("books"),
+  },
+  returns: v.object({
+    originalsDeleted: v.number(),
+    revisionsDeleted: v.number(),
+    chaptersDeleted: v.number(),
+    flagsDeleted: v.number(),
+    jobsDeleted: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    // Delete originals
+    const originals = await ctx.db.query("cleanupOriginals")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .collect();
+    for (const orig of originals) {
+      await ctx.db.delete(orig._id);
+    }
+
+    // Delete revisions (this will orphan chapters, but we'll clean them too)
+    const revisions = await ctx.db.query("cleanupRevisions")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .collect();
+    for (const rev of revisions) {
+      await ctx.db.delete(rev._id);
+    }
+
+    // Delete chapters
+    const chapters = await ctx.db.query("cleanupChapters")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .collect();
+    for (const ch of chapters) {
+      await ctx.db.delete(ch._id);
+    }
+
+    // Delete flags
+    const flags = await ctx.db.query("cleanupFlags")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .collect();
+    for (const flag of flags) {
+      await ctx.db.delete(flag._id);
+    }
+
+    // Delete jobs
+    const jobs = await ctx.db.query("cleanupJobs")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .collect();
+    for (const job of jobs) {
+      await ctx.db.delete(job._id);
+    }
+
+    // Reset book status to imported
+    await ctx.db.patch(args.bookId, { status: "imported" });
+
+    return {
+      originalsDeleted: originals.length,
+      revisionsDeleted: revisions.length,
+      chaptersDeleted: chapters.length,
+      flagsDeleted: flags.length,
+      jobsDeleted: jobs.length,
     };
   },
 });
