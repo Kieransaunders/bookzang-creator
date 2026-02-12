@@ -65,10 +65,22 @@ const applicationTables = {
     progress: v.optional(v.number()),
     stage: v.optional(
       v.union(
+        // Import stages
         v.literal("queued"),
         v.literal("loading_file"),
         v.literal("parsing_metadata"),
         v.literal("persisting_metadata"),
+        // Cleanup stages
+        v.literal("loading_original"),
+        v.literal("boilerplate_removal"),
+        v.literal("paragraph_unwrap"),
+        v.literal("chapter_detection"),
+        v.literal("punctuation_normalization"),
+        // AI cleanup stages
+        v.literal("ai_chunking"),
+        v.literal("ai_processing"),
+        v.literal("ai_applying_patches"),
+        // Completion stages
         v.literal("completed"),
         v.literal("failed"),
       ),
