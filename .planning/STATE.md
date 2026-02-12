@@ -10,11 +10,11 @@ See: `.planning/PROJECT.md` (updated 2026-02-12)
 ## Current Position
 
 Phase: 1 of 4 (Book Intake and Pipeline Visibility)
-Plan: 1 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-12 - Completed plan 01-01 backend intake pipeline foundation.
+Last activity: 2026-02-12 - Completed plan 01-03 pipeline observability UX.
 
-Progress: [███░░░░░░░] 33%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -32,10 +32,11 @@ Progress: [███░░░░░░░] 33%
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (7 min)
+- Last 5 plans: 01-01 (7 min), 01-03 (5 min)
 - Trend: Stable
 
 _Updated after each plan completion_
+| Phase 01-book-intake-and-pipeline-visibility P03 | 5 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -50,6 +51,8 @@ Recent decisions affecting current work:
 - [Phase 01-book-intake-and-pipeline-visibility]: Use discoveryCandidates table so discovery rows remain visible before and after enqueue.
 - [Phase 01-book-intake-and-pipeline-visibility]: Treat Gutenberg-ID dedupe as default block and return existingBookId for inline linking.
 - [Phase 01-book-intake-and-pipeline-visibility]: Fail extraction when no file exists and persist job/book failure details for operator review.
+- [Phase 01-book-intake-and-pipeline-visibility]: Use grouped summary query as default jobs view so multi-job books are monitored by state first.
+- [Phase 01-book-intake-and-pipeline-visibility]: Centralize canonical status/stage labels in src/lib/jobStatus.ts to avoid done/error drift across list and drawer.
 
 ### Pending Todos
 
@@ -64,6 +67,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-12 10:27
-Stopped at: Completed 01-book-intake-and-pipeline-visibility-01-PLAN.md
+Last session: 2026-02-12 10:34
+Stopped at: Completed 01-book-intake-and-pipeline-visibility-03-PLAN.md
 Resume file: None
