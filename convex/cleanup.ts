@@ -527,6 +527,46 @@ export const getCleanupStatus = query({
   },
 });
 
+/**
+ * Get cleanup statuses for multiple books (for polling)
+ */
+export const getCleanupStatusesForBooks = query({
+  args: {
+    bookIds: v.array(v.id("books")),
+  },
+  returns: v.array(v.union(v.null(), v.object({
+    bookId: v.string(),
+    status: v.union(v.literal("queued"), v.literal("running"), v.literal("completed"), v.literal("failed")),
+    stage: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    error: v.optional(v.string()),
+  }))),
+  handler: async (ctx, args) => {
+    const results = [];
+    
+    for (const bookId of args.bookIds) {
+      const job = await ctx.db.query("cleanupJobs")
+        .withIndex("by_book_id", q => q.eq("bookId", bookId))
+        .order("desc")
+        .first();
+      
+      if (job) {
+        results.push({
+          bookId,
+          status: job.status,
+          stage: job.stage,
+          progress: job.progress,
+          error: job.error,
+        });
+      } else {
+        results.push(null);
+      }
+    }
+    
+    return results;
+  },
+});
+
 // ─── Internal mutations for pipeline coordination ───────────────────────────
 
 /**

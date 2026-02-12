@@ -2,16 +2,35 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Mail, Lock, UserPlus, LogIn, Sparkles, Eye, EyeOff } from "lucide-react";
 
 export function SignInForm() {
   const { signIn } = useAuthActions();
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const toggleFlow = () => {
+    setFlow(flow === "signIn" ? "signUp" : "signIn");
+  };
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-6">
+      {/* Form Header */}
+      <div className="text-center space-y-2">
+        <h2 className="text-2xl font-bold text-white">
+          {flow === "signIn" ? "Welcome back" : "Create account"}
+        </h2>
+        <p className="text-sm text-white/50 font-normal">
+          {flow === "signIn" 
+            ? "Enter your credentials to access your library" 
+            : "Sign up to start transforming books"}
+        </p>
+      </div>
+
+      {/* Main Form */}
       <form
-        className="flex flex-col gap-form-field"
+        className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           setSubmitting(true);
@@ -32,46 +51,110 @@ export function SignInForm() {
           });
         }}
       >
-        <input
-          className="auth-input-field"
-          type="email"
-          name="email"
-          placeholder="Email"
-          required
-        />
-        <input
-          className="auth-input-field"
-          type="password"
-          name="password"
-          placeholder="Password"
-          required
-        />
-        <button className="auth-button" type="submit" disabled={submitting}>
-          {flow === "signIn" ? "Sign in" : "Sign up"}
-        </button>
-        <div className="text-center text-sm text-secondary">
-          <span>
-            {flow === "signIn"
-              ? "Don't have an account? "
-              : "Already have an account? "}
-          </span>
+        {/* Email Field */}
+        <div className="relative">
+          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40 pointer-events-none" />
+          <input
+            className="auth-input-field !pl-[4.5rem]"
+            type="email"
+            name="email"
+            placeholder="Email address"
+            required
+            autoComplete="email"
+          />
+        </div>
+
+        {/* Password Field */}
+        <div className="relative">
+          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40 pointer-events-none" />
+          <input
+            className="auth-input-field !pl-[4.5rem] !pr-14"
+            type={showPassword ? "text" : "password"}
+            name="password"
+            placeholder="Password"
+            required
+            autoComplete={flow === "signIn" ? "current-password" : "new-password"}
+          />
           <button
             type="button"
-            className="text-primary hover:text-primary-hover hover:underline font-medium cursor-pointer"
-            onClick={() => setFlow(flow === "signIn" ? "signUp" : "signIn")}
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors cursor-pointer"
+            aria-label={showPassword ? "Hide password" : "Show password"}
           >
-            {flow === "signIn" ? "Sign up instead" : "Sign in instead"}
+            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
           </button>
         </div>
+
+        {/* Submit Button */}
+        <button 
+          className="auth-button-primary flex items-center justify-center gap-2" 
+          type="submit" 
+          disabled={submitting}
+        >
+          {submitting ? (
+            <>
+              <span className="auth-spinner" />
+              <span>{flow === "signIn" ? "Signing in..." : "Creating account..."}</span>
+            </>
+          ) : (
+            <>
+              {flow === "signIn" ? (
+                <LogIn className="w-5 h-5" />
+              ) : (
+                <UserPlus className="w-5 h-5" />
+              )}
+              <span>{flow === "signIn" ? "Sign in" : "Create account"}</span>
+            </>
+          )}
+        </button>
       </form>
-      <div className="flex items-center justify-center my-3">
-        <hr className="my-4 grow border-gray-200" />
-        <span className="mx-4 text-secondary">or</span>
-        <hr className="my-4 grow border-gray-200" />
+
+      {/* Toggle Flow Link */}
+      <div className="text-center">
+        <span className="text-sm text-white/50 font-normal">
+          {flow === "signIn"
+            ? "Don't have an account? "
+            : "Already have an account? "}
+        </span>
+        <button
+          type="button"
+          className="auth-text-button text-sm ml-1 font-medium"
+          onClick={toggleFlow}
+        >
+          {flow === "signIn" ? "Sign up" : "Sign in"}
+        </button>
       </div>
-      <button className="auth-button" onClick={() => void signIn("anonymous")}>
-        Sign in anonymously
+
+      {/* Divider */}
+      <div className="auth-divider">
+        <span>or continue with</span>
+      </div>
+
+      {/* Anonymous Sign In */}
+      <button 
+        className="auth-button-secondary flex items-center justify-center gap-2" 
+        onClick={() => void signIn("anonymous")}
+        disabled={submitting}
+      >
+        <Sparkles className="w-5 h-5 text-emerald-400" />
+        <span>Sign in anonymously</span>
       </button>
+
+      {/* Trust Indicators */}
+      <div className="flex items-center justify-center gap-4 pt-2">
+        <div className="flex items-center gap-1.5 text-xs text-white/40">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span>Secure</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-white/40">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span>Instant access</span>
+        </div>
+      </div>
     </div>
   );
 }

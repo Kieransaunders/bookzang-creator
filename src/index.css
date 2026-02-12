@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,6 +7,11 @@
 :root {
   --color-light: #ffffff;
   --color-dark: #171717;
+  --primary: #6366F1;
+  --primary-hover: #4F46E5;
+  --secondary: #818CF8;
+  --accent: #10B981;
+  --accent-hover: #059669;
 }
 
 .accent-text {
@@ -12,37 +19,296 @@
 }
 
 body {
-  font-family:
-    "Inter Variable",
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    "Noto Sans",
-    sans-serif,
-    "Apple Color Emoji",
-    "Segoe UI Emoji",
-    "Segoe UI Symbol",
-    "Noto Color Emoji";
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--color-dark);
   background: var(--color-light);
 }
 
-/* only use this to update the style of the auth input fields. use a different class for all other input fields */
+/* ===== AUTHENTICATION PAGE STYLES ===== */
+
+/* Auth Card Container - Liquid Glass */
+.auth-card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Auth Input Fields */
 .auth-input-field {
-  @apply w-full px-4 py-3 rounded-container bg-white border border-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow shadow-sm hover:shadow;
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: white;
+  font-size: 15px;
+  font-weight: 400;
+  transition: all 200ms ease;
+  outline: none;
 }
 
-/* only use this to update the style of the auth buttons. use the button class for all other buttons */
-.auth-button {
-  @apply w-full px-4 py-3 rounded bg-primary text-white font-semibold hover:bg-primary-hover transition-colors shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed;
+.auth-input-field::placeholder {
+  color: rgba(255, 255, 255, 0.7);
 }
 
-/* Liquid Glass Effect */
+.auth-input-field:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.auth-input-field:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--primary);
+  box-shadow: 
+    0 0 0 3px rgba(99, 102, 241, 0.2),
+    0 0 20px rgba(99, 102, 241, 0.15);
+}
+
+/* Primary Auth Button */
+.auth-button-primary {
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6366F1 0%, #818CF8 100%);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 200ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-button-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 500ms ease;
+}
+
+.auth-button-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 10px 25px -5px rgba(99, 102, 241, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+}
+
+.auth-button-primary:hover::before {
+  left: 100%;
+}
+
+.auth-button-primary:active {
+  transform: translateY(0);
+}
+
+.auth-button-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Secondary Auth Button (Anonymous) */
+.auth-button-secondary {
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.auth-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.auth-button-secondary:active {
+  transform: translateY(0);
+}
+
+/* Text Button (Sign Up/Sign In toggle) */
+.auth-text-button {
+  color: #818CF8;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 200ms ease;
+  position: relative;
+}
+
+.auth-text-button:hover {
+  color: #A5B4FC;
+}
+
+.auth-text-button::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366F1, #818CF8);
+  transition: width 200ms ease;
+  border-radius: 1px;
+}
+
+.auth-text-button:hover::after {
+  width: 100%;
+}
+
+/* Divider */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+}
+
+/* Animated Background Gradient */
+.auth-background {
+  background: 
+    radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.25) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(129, 140, 248, 0.1) 0%, transparent 70%),
+    linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #0F172A 100%);
+  background-size: 200% 200%, 200% 200%, 200% 200%, 100% 100%;
+  animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 0%, 100% 100%, 50% 50%, 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%, 0% 0%, 50% 50%, 0% 0%;
+  }
+}
+
+/* Floating Particles Effect */
+.auth-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.auth-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  animation: float 20s infinite;
+}
+
+.auth-particle:nth-child(1) { left: 10%; animation-delay: 0s; animation-duration: 25s; }
+.auth-particle:nth-child(2) { left: 20%; animation-delay: 2s; animation-duration: 20s; }
+.auth-particle:nth-child(3) { left: 30%; animation-delay: 4s; animation-duration: 30s; }
+.auth-particle:nth-child(4) { left: 40%; animation-delay: 1s; animation-duration: 22s; }
+.auth-particle:nth-child(5) { left: 50%; animation-delay: 3s; animation-duration: 28s; }
+.auth-particle:nth-child(6) { left: 60%; animation-delay: 5s; animation-duration: 24s; }
+.auth-particle:nth-child(7) { left: 70%; animation-delay: 2s; animation-duration: 26s; }
+.auth-particle:nth-child(8) { left: 80%; animation-delay: 4s; animation-duration: 21s; }
+.auth-particle:nth-child(9) { left: 90%; animation-delay: 1s; animation-duration: 27s; }
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* Logo/Brand Animation */
+.auth-logo {
+  animation: logoGlow 3s ease-in-out infinite;
+}
+
+@keyframes logoGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 40px rgba(99, 102, 241, 0.6));
+  }
+}
+
+/* Form Field Focus Animation */
+@keyframes focusPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.1);
+  }
+}
+
+.auth-input-field:focus {
+  animation: focusPulse 2s ease-in-out infinite;
+}
+
+/* Loading Spinner */
+.auth-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Liquid Glass Effect (Legacy - for other components) */
 .liquid-glass {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);

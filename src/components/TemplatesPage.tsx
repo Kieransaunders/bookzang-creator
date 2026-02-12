@@ -124,7 +124,7 @@ export function TemplatesPage() {
                 className={`p-4 rounded-xl border text-left transition-all ${
                   selectedBookId === book._id
                     ? "bg-green-500/10 border-green-500/50"
-                    : "bg-white/5 border-white/10 hover:border-white/20"
+                    : "bg-slate-800/40 border-white/5 hover:border-white/20"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -178,7 +178,7 @@ export function TemplatesPage() {
                 className={`group p-6 rounded-xl border transition-all duration-200 ${
                   isLocked
                     ? "bg-white/[0.02] border-white/5 opacity-60"
-                    : "bg-white/5 border-white/10 hover:border-indigo-500/30 hover:bg-white/[0.07] cursor-pointer"
+                    : "bg-slate-800/40 border-white/5 hover:border-indigo-500/40 hover:bg-slate-800/60 cursor-pointer"
                 }`}
               >
                 <div className="space-y-5 flex flex-col h-full">
@@ -187,7 +187,7 @@ export function TemplatesPage() {
                     className={`h-36 rounded-xl flex items-center justify-center border transition-colors ${
                       isLocked
                         ? "bg-white/[0.02] border-white/5"
-                        : "bg-gradient-to-br from-white/5 to-white/[0.02] border-white/5 group-hover:border-indigo-500/20"
+                        : "bg-gradient-to-br from-slate-700/30 to-slate-800/20 border-white/5 group-hover:border-indigo-500/20"
                     }`}
                   >
                     <div className="text-center px-6">
@@ -266,7 +266,7 @@ export function TemplatesPage() {
       </div>
 
       {/* Blocked Books Section (collapsible) */}
-      <div className="border-t border-white/10 pt-6">
+      <div className="border-t border-white/5 pt-6">
         <button
           onClick={() => setShowBlockedBooks(!showBlockedBooks)}
           className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
@@ -278,7 +278,7 @@ export function TemplatesPage() {
         </button>
 
         {showBlockedBooks && (
-          <div className="mt-4 p-4 bg-white/5 rounded-xl space-y-3">
+          <div className="mt-4 p-4 bg-slate-800/40 rounded-xl space-y-3">
             <div className="flex gap-3">
               <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
                 <span className="text-sm font-medium text-blue-400">1</span>

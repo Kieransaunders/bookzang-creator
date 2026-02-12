@@ -17,7 +17,7 @@ const statusLabel: Record<string, string> = {
 };
 
 const statusClass: Record<string, string> = {
-  discovered: "bg-slate-500/20 text-slate-200 border-slate-500/40",
+  discovered: "bg-slate-500/20 text-white/80 border-slate-500/40",
   queued: "bg-amber-500/20 text-amber-200 border-amber-500/40",
   running: "bg-sky-500/20 text-sky-200 border-sky-500/40",
   completed: "bg-emerald-500/20 text-emerald-200 border-emerald-500/40",
@@ -65,33 +65,33 @@ export function DiscoveryCandidatesPanel() {
 
   if (candidates === undefined) {
     return (
-      <div className="flex items-center justify-center rounded-xl border border-white/10 p-8">
+      <div className="flex items-center justify-center rounded-xl border border-white/5 p-8">
         <Loader2 className="h-6 w-6 animate-spin text-white" />
       </div>
     );
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+    <section className="space-y-4 rounded-xl border border-white/5 bg-slate-800/40 p-4">
       <div>
         <h3 className="text-lg font-semibold text-white">
           Discovery Candidates
         </h3>
-        <p className="text-sm text-slate-300">
+        <p className="text-sm text-white/70">
           Review candidates before enqueue. Rows remain visible with status
           changes.
         </p>
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-white/20 p-4 text-sm text-slate-300">
+        <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-white/70">
           No discovery candidates yet. Run the library discovery command to
           populate this list.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-white/10">
-          <table className="w-full min-w-[760px] text-left text-sm text-slate-200">
-            <thead className="bg-white/5 text-xs uppercase tracking-wide text-slate-300">
+        <div className="overflow-x-auto rounded-lg border border-white/5">
+          <table className="w-full min-w-[760px] text-left text-sm text-white/80">
+            <thead className="bg-slate-800/40 text-xs uppercase tracking-wide text-white/70">
               <tr>
                 <th className="px-3 py-2">Gutenberg ID</th>
                 <th className="px-3 py-2">Title / Author</th>
@@ -116,16 +116,16 @@ export function DiscoveryCandidatesPanel() {
                 return (
                   <tr
                     key={candidate._id}
-                    className="border-t border-white/10 align-top"
+                    className="border-t border-white/5 align-top"
                   >
-                    <td className="px-3 py-3 font-mono text-xs text-slate-100">
+                    <td className="px-3 py-3 font-mono text-xs text-white/90">
                       {candidate.gutenbergId}
                     </td>
                     <td className="px-3 py-3">
                       <p className="font-medium text-white">
                         {candidate.title || "Unknown Title"}
                       </p>
-                      <p className="text-slate-300">
+                      <p className="text-white/70">
                         {candidate.author || "Unknown Author"}
                       </p>
                       {warningText && (
@@ -152,7 +152,7 @@ export function DiscoveryCandidatesPanel() {
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-xs text-slate-300">
+                    <td className="px-3 py-3 text-xs text-white/70">
                       <code>{candidate.sourcePath}</code>
                     </td>
                     <td className="px-3 py-3">
@@ -178,7 +178,7 @@ export function DiscoveryCandidatesPanel() {
                           Enqueue
                         </button>
                         {candidate.status === "duplicate_blocked" && (
-                          <label className="flex items-center gap-2 text-xs text-slate-200">
+                          <label className="flex items-center gap-2 text-xs text-white/80">
                             <input
                               checked={Boolean(overrideMap[candidate._id])}
                               onChange={(e) =>

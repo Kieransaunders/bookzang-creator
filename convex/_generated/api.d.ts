@@ -11,9 +11,13 @@
 import type * as auth from "../auth.js";
 import type * as books from "../books.js";
 import type * as cleanup from "../cleanup.js";
+import type * as cleanupAi from "../cleanupAi.js";
+import type * as cleanupAiClient from "../cleanupAiClient.js";
 import type * as cleanupChaptering from "../cleanupChaptering.js";
 import type * as cleanupFlags from "../cleanupFlags.js";
+import type * as cleanupPatchApply from "../cleanupPatchApply.js";
 import type * as cleanupPipeline from "../cleanupPipeline.js";
+import type * as cleanupPrompts from "../cleanupPrompts.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as intake from "../intake.js";
@@ -32,9 +36,13 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   books: typeof books;
   cleanup: typeof cleanup;
+  cleanupAi: typeof cleanupAi;
+  cleanupAiClient: typeof cleanupAiClient;
   cleanupChaptering: typeof cleanupChaptering;
   cleanupFlags: typeof cleanupFlags;
+  cleanupPatchApply: typeof cleanupPatchApply;
   cleanupPipeline: typeof cleanupPipeline;
+  cleanupPrompts: typeof cleanupPrompts;
   files: typeof files;
   http: typeof http;
   intake: typeof intake;

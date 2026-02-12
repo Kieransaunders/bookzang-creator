@@ -90,14 +90,15 @@ Plans:
 3. Generated interior PDFs embed required fonts and pass KDP-critical checks for trim and margins.
 4. User can download stored interior export artifacts for reuse and KDP upload.
 
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
 
 - [ ] 03-01-PLAN.md — Template system and data model with presets
 - [ ] 03-02-PLAN.md — PDF generation pipeline with Playwright + Paged.js
 - [ ] 03-03-PLAN.md — KDP compliance validation and pre-flight checks
-- [ ] 03-04-PLAN.md — Interior export UX and artifact management
+- [ ] 03-04a-PLAN.md — Template selection and customization UI
+- [ ] 03-04b-PLAN.md — Generation flow and artifact management
 
 ### Phase 4: Cover Packaging and Batch Automation
 
@@ -126,5 +127,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | ----------------------------------------------- | -------------- | ----------- | ---------- |
 | 1. Book Intake and Pipeline Visibility          | 3/3            | Complete    | 2026-02-12 |
 | 2. Text Cleanup and Editorial Approval          | 0/4            | Planned     | -          |
-| 3. Typography Templates and KDP Interior Export | 4/4            | Planned     | -          |
+| 3. Typography Templates and KDP Interior Export | 5/5            | Planned     | -          |
 | 4. Cover Packaging and Batch Automation         | 0/TBD          | Not started | -          |

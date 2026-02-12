@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-import { X, AlertCircle, Upload, FileText } from "lucide-react";
+import { X, AlertCircle, Upload, FileText, BookOpen, User, Hash } from "lucide-react";
 import { toast } from "sonner";
 
 interface ImportModalProps {
@@ -29,7 +29,6 @@ export function ImportModal({ onClose }: ImportModalProps) {
     if (/^\d+$/.test(input.trim())) {
       return input.trim();
     }
-
     return null;
   };
 
@@ -91,10 +90,8 @@ export function ImportModal({ onClose }: ImportModalProps) {
     setDuplicateBlock(null);
 
     try {
-      // Step 1: Get upload URL
       const uploadUrl = await generateUploadUrl();
 
-      // Step 2: Upload file
       const result = await fetch(uploadUrl, {
         method: "POST",
         headers: { "Content-Type": selectedFile.type },
@@ -107,7 +104,6 @@ export function ImportModal({ onClose }: ImportModalProps) {
 
       const { storageId } = await result.json();
 
-      // Step 3: Create book from uploaded file
       const response = await createBookFromFile({
         title: bookTitle.trim(),
         author: bookAuthor.trim(),
@@ -143,7 +139,6 @@ export function ImportModal({ onClose }: ImportModalProps) {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
       const validTypes = [
         "text/plain",
         "text/markdown",
@@ -162,7 +157,6 @@ export function ImportModal({ onClose }: ImportModalProps) {
       }
 
       if (file.size > 10 * 1024 * 1024) {
-        // 10MB limit
         toast.error("File size must be less than 10MB");
         return;
       }
@@ -177,7 +171,6 @@ export function ImportModal({ onClose }: ImportModalProps) {
         }
       }
 
-      // Auto-populate title from filename if empty
       if (!bookTitle) {
         const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
         setBookTitle(nameWithoutExt);
@@ -196,56 +189,79 @@ export function ImportModal({ onClose }: ImportModalProps) {
             setBookAuthor(inferred.author);
           }
         } catch {
-          // Ignore preview parsing errors and keep manual entry path.
+          // Ignore preview parsing errors
         }
       }
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="w-full max-w-md rounded-2xl liquid-glass-strong p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold text-white">Import Book</h3>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="w-full max-w-lg auth-card p-8 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-xl font-semibold text-white">Import Book</h3>
+            <p className="text-sm text-white/90 mt-1">Upload a book file to get started</p>
+          </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors"
+            className="w-10 h-10 rounded-xl bg-slate-800/40 hover:bg-slate-700/50 border border-white/5 flex items-center justify-center text-white/70 hover:text-white transition-all"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleFileUpload} className="space-y-4">
+        <form onSubmit={handleFileUpload} className="space-y-5">
+          {/* File Upload */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Select File
+            <label className="block text-sm font-medium text-white/70 mb-2.5">
+              Book File
             </label>
             <div className="relative">
               <input
                 type="file"
                 accept=".txt,.md,.epub,text/plain,text/markdown,application/epub+zip"
                 onChange={handleFileSelect}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 id="file-upload"
               />
-              <div className="w-full flex items-center justify-center gap-3 px-4 py-6 bg-white/10 border-2 border-dashed border-white/20 rounded-lg text-white hover:bg-white/20 transition-colors cursor-pointer">
+              <div className={`w-full flex items-center gap-4 p-5 rounded-xl border-2 border-dashed transition-all ${
+                selectedFile 
+                  ? "bg-indigo-500/5 border-indigo-500/30" 
+                  : "bg-slate-800/40 border-white/5 hover:bg-slate-800/60 hover:border-white/20"
+              }`}>
                 {selectedFile ? (
                   <>
-                    <FileText className="text-blue-400" size={20} />
-                    <div className="text-center">
-                      <div className="font-medium">{selectedFile.name}</div>
-                      <div className="text-sm text-slate-400">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
+                      <FileText className="text-indigo-400" size={24} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white truncate">{selectedFile.name}</div>
+                      <div className="text-sm text-white/70">
                         {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFile(null);
+                      }}
+                      className="w-8 h-8 rounded-lg bg-slate-800/40 hover:bg-slate-700/50 flex items-center justify-center text-white/70 hover:text-white transition-all"
+                    >
+                      <X size={16} />
+                    </button>
                   </>
                 ) : (
                   <>
-                    <Upload className="text-slate-400" size={20} />
-                    <div className="text-center">
-                      <div className="font-medium">Choose a file</div>
-                      <div className="text-sm text-slate-400">
-                        .txt, .md, or .epub files up to 10MB
+                    <div className="w-12 h-12 rounded-xl bg-slate-800/40 flex items-center justify-center flex-shrink-0">
+                      <Upload className="text-white/60" size={24} />
+                    </div>
+                    <div>
+                      <div className="font-medium text-white">Click to upload</div>
+                      <div className="text-sm text-white/70">
+                        .txt, .md, or .epub up to 10MB
                       </div>
                     </div>
                   </>
@@ -254,8 +270,10 @@ export function ImportModal({ onClose }: ImportModalProps) {
             </div>
           </div>
 
+          {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-white/70 mb-2.5">
+              <BookOpen size={14} className="inline mr-1.5 -mt-0.5" />
               Book Title
             </label>
             <input
@@ -263,13 +281,15 @@ export function ImportModal({ onClose }: ImportModalProps) {
               value={bookTitle}
               onChange={(e) => setBookTitle(e.target.value)}
               placeholder="Enter the book title"
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-4 py-3.5 bg-slate-800/40 border border-white/5 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
               required
             />
           </div>
 
+          {/* Author */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
+            <label className="block text-sm font-medium text-white/70 mb-2.5">
+              <User size={14} className="inline mr-1.5 -mt-0.5" />
               Author
             </label>
             <input
@@ -277,14 +297,16 @@ export function ImportModal({ onClose }: ImportModalProps) {
               value={bookAuthor}
               onChange={(e) => setBookAuthor(e.target.value)}
               placeholder="Enter the author name"
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-4 py-3.5 bg-slate-800/40 border border-white/5 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
               required
             />
           </div>
 
+          {/* Gutenberg ID */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Gutenberg ebook code (folder number, optional)
+            <label className="block text-sm font-medium text-white/70 mb-2.5">
+              <Hash size={14} className="inline mr-1.5 -mt-0.5" />
+              Gutenberg ID (optional)
             </label>
             <input
               type="text"
@@ -296,67 +318,52 @@ export function ImportModal({ onClose }: ImportModalProps) {
                 setDuplicateBlock(null);
               }}
               placeholder="e.g., 11"
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              className="w-full px-4 py-3.5 bg-slate-800/40 border border-white/5 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all"
             />
-            <p className="mt-2 text-xs text-slate-400">
-              Uses your local `library/epub/&lt;number&gt;` folder number.
-              Auto-fills from filenames like `pg11.txt`.
+            <p className="mt-2 text-xs text-white/60">
+              Auto-fills from filenames like <code className="bg-slate-800/40 px-1 py-0.5 rounded">pg11.txt</code>
             </p>
           </div>
 
+          {/* Duplicate Warning */}
           {duplicateBlock && (
-            <div className="space-y-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-              <div className="flex items-start gap-2">
-                <AlertCircle
-                  className="mt-0.5 flex-shrink-0 text-amber-300"
-                  size={16}
-                />
-                <div>
-                  <p className="font-medium">Duplicate blocked</p>
-                  <p>{duplicateBlock.message}</p>
-                  {duplicateBlock.gutenbergId && (
-                    <p>Gutenberg #{duplicateBlock.gutenbergId}</p>
-                  )}
-                  <a
-                    href={`#book-${duplicateBlock.existingBookId}`}
-                    className="mt-1 inline-block text-blue-300 underline"
-                  >
-                    Jump to existing book
-                  </a>
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 flex-shrink-0 text-amber-400" size={18} />
+                <div className="flex-1">
+                  <p className="font-medium text-amber-200 mb-1">Duplicate detected</p>
+                  <p className="text-sm text-amber-200/70">{duplicateBlock.message}</p>
+                  <label className="flex items-center gap-2 mt-3 text-sm text-amber-100">
+                    <input
+                      type="checkbox"
+                      checked={overrideDuplicate}
+                      onChange={(e) => setOverrideDuplicate(e.target.checked)}
+                      className="rounded border-amber-500/50 bg-amber-500/10"
+                    />
+                    Import as duplicate anyway
+                  </label>
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-amber-100">
-                <input
-                  type="checkbox"
-                  checked={overrideDuplicate}
-                  onChange={(e) => setOverrideDuplicate(e.target.checked)}
-                />
-                Import intentionally as duplicate
-              </label>
             </div>
           )}
 
-          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <AlertCircle
-                className="text-green-400 flex-shrink-0 mt-0.5"
-                size={16}
-              />
-              <div className="text-sm text-green-300">
-                <p className="font-medium mb-1">Supported formats:</p>
-                <p>
-                  Plain text (.txt), Markdown (.md), and EPUB (.epub) files are
-                  supported.
-                </p>
+          {/* Info Box */}
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="text-emerald-400 flex-shrink-0 mt-0.5" size={18} />
+              <div className="text-sm text-emerald-200/80">
+                <p className="font-medium text-emerald-200 mb-1">Supported formats</p>
+                <p>Plain text (.txt), Markdown (.md), and EPUB files are supported. Maximum file size is 10MB.</p>
               </div>
             </div>
           </div>
 
+          {/* Actions */}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+              className="flex-1 px-5 py-3.5 bg-slate-800/40 hover:bg-slate-700/50 text-white font-medium rounded-xl border border-white/5 transition-all"
             >
               Cancel
             </button>
@@ -368,14 +375,14 @@ export function ImportModal({ onClose }: ImportModalProps) {
                 !bookTitle.trim() ||
                 !bookAuthor.trim()
               }
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white rounded-lg transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-5 py-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-all shadow-lg shadow-indigo-500/25"
             >
               {isLoading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
               ) : (
                 <>
-                  <Upload size={16} />
-                  {overrideDuplicate ? "Upload with Override" : "Upload"}
+                  <Upload size={18} />
+                  {overrideDuplicate ? "Import Duplicate" : "Import Book"}
                 </>
               )}
             </button>
