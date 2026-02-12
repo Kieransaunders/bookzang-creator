@@ -5,7 +5,7 @@ import { Id } from "../../convex/_generated/dataModel";
 import { DiscoveryCandidatesPanel } from "./DiscoveryCandidatesPanel";
 import { toast } from "sonner";
 
-import { Search, Book, User, Calendar, FileText, Download, Edit3, Play, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
+import { Search, Book, User, Calendar, FileText, Download, Edit3, Play, Loader2, Sparkles, CheckCircle2, Trash2, AlertTriangle } from "lucide-react";
 
 interface LibraryPageProps {
   onEnterReview?: (bookId: Id<"books">) => void;
@@ -35,6 +35,9 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   const debouncedSearch = useDebounce(inputValue, 300);
   const books = useQuery(api.books.list, { search: debouncedSearch || undefined });
   const startCleanup = useMutation(api.cleanup.startCleanup);
+  const deleteBook = useMutation(api.books.deleteBook);
+  const [deletingBook, setDeletingBook] = useState<Id<"books"> | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Id<"books"> | null>(null);
 
   // Poll for cleanup status on books that are being cleaned
   const cleanupStatuses = useQuery(
@@ -152,6 +155,28 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
     }
   };
 
+  const handleDeleteBook = async (bookId: Id<"books">, bookTitle: string) => {
+    setDeletingBook(bookId);
+    const toastId = toast.loading(`Deleting "${bookTitle}"...`);
+    
+    try {
+      const result = await deleteBook({ bookId });
+      toast.success(`"${bookTitle}" deleted`, {
+        id: toastId,
+        description: `Removed ${result.deleted.revisions} revisions, ${result.deleted.chapters} chapters, ${result.deleted.flags} flags`,
+      });
+      setShowDeleteConfirm(null);
+    } catch (err) {
+      console.error("Failed to delete book:", err);
+      toast.error("Failed to delete book", {
+        id: toastId,
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setDeletingBook(null);
+    }
+  };
+
   const getCleanupProgress = (bookId: string) => {
     const status = cleanupStatuses?.find(s => s?.bookId === bookId);
     if (!status || status.status === "completed" || status.status === "failed") return null;
@@ -226,7 +251,7 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
               <div
                 key={book._id}
                 id={`book-${book._id}`}
-                className="group p-5 rounded-xl bg-slate-800/40 border border-white/5 hover:border-indigo-500/40 hover:bg-slate-800/60 transition-all duration-200"
+                className="group relative p-5 rounded-xl bg-slate-800/40 border border-white/5 hover:border-indigo-500/40 hover:bg-slate-800/60 transition-all duration-200"
               >
                 <div className="space-y-4">
                   {/* Header */}
@@ -334,8 +359,53 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                         Processing...
                       </div>
                     )}
+
+                    {/* Delete button */}
+                    <button
+                      onClick={() => setShowDeleteConfirm(book._id)}
+                      disabled={deletingBook === book._id}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-50 text-rose-300 border border-rose-500/30 rounded-lg transition-all duration-200 text-sm font-medium opacity-0 group-hover:opacity-100"
+                    >
+                      {deletingBook === book._id ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 size={14} />
+                          Delete Book
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
+
+                {/* Delete Confirmation Modal */}
+                {showDeleteConfirm === book._id && (
+                  <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-4 z-10">
+                    <AlertTriangle className="text-rose-400 mb-3" size={32} />
+                    <h4 className="font-semibold text-white text-center mb-1">Delete Book?</h4>
+                    <p className="text-sm text-white/70 text-center mb-4">
+                      This will permanently remove "{book.title}" and all associated cleanup data.
+                    </p>
+                    <div className="flex gap-2 w-full">
+                      <button
+                        onClick={() => setShowDeleteConfirm(null)}
+                        className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBook(book._id, book.title)}
+                        disabled={deletingBook === book._id}
+                        className="flex-1 px-4 py-2 bg-rose-500 hover:bg-rose-400 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+                      >
+                        {deletingBook === book._id ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

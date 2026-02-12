@@ -22,6 +22,7 @@ import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as intake from "../intake.js";
 import type * as intakeMetadata from "../intakeMetadata.js";
+import type * as jobStages from "../jobStages.js";
 import type * as jobs from "../jobs.js";
 import type * as router from "../router.js";
 import type * as templates from "../templates.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   intake: typeof intake;
   intakeMetadata: typeof intakeMetadata;
+  jobStages: typeof jobStages;
   jobs: typeof jobs;
   router: typeof router;
   templates: typeof templates;

@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { cleanupJobStageValidator, mainJobStageValidator } from "./jobStages";
 
 const applicationTables = {
   books: defineTable({
@@ -63,28 +64,7 @@ const applicationTables = {
     gutenbergId: v.optional(v.string()),
     source: v.optional(v.union(v.literal("upload"), v.literal("discovery"))),
     progress: v.optional(v.number()),
-    stage: v.optional(
-      v.union(
-        // Import stages
-        v.literal("queued"),
-        v.literal("loading_file"),
-        v.literal("parsing_metadata"),
-        v.literal("persisting_metadata"),
-        // Cleanup stages
-        v.literal("loading_original"),
-        v.literal("boilerplate_removal"),
-        v.literal("paragraph_unwrap"),
-        v.literal("chapter_detection"),
-        v.literal("punctuation_normalization"),
-        // AI cleanup stages
-        v.literal("ai_chunking"),
-        v.literal("ai_processing"),
-        v.literal("ai_applying_patches"),
-        // Completion stages
-        v.literal("completed"),
-        v.literal("failed"),
-      ),
-    ),
+    stage: v.optional(mainJobStageValidator),
     logs: v.optional(v.string()),
     error: v.optional(v.string()),
     errorDetails: v.optional(v.string()),
@@ -117,27 +97,26 @@ const applicationTables = {
   // NOTE: Content is stored in Convex File Storage, not in database (1MB limit)
   cleanupOriginals: defineTable({
     bookId: v.id("books"),
-    fileId: v.optional(v.id("_storage")),  // Reference to stored original file
+    fileId: v.optional(v.id("_storage")), // Reference to stored original file
     capturedAt: v.number(),
     sourceFormat: v.union(v.literal("gutenberg_txt"), v.literal("markdown")),
-    sizeBytes: v.optional(v.number()),  // Track original size
+    sizeBytes: v.optional(v.number()), // Track original size
     // DEPRECATED: content stored directly (removed due to 1MB limit)
     content: v.optional(v.string()),
-  })
-    .index("by_book_id", ["bookId"]),
+  }).index("by_book_id", ["bookId"]),
 
   cleanupRevisions: defineTable({
     bookId: v.id("books"),
     revisionNumber: v.number(),
-    fileId: v.optional(v.id("_storage")),  // Reference to stored cleaned file
+    fileId: v.optional(v.id("_storage")), // Reference to stored cleaned file
     isDeterministic: v.boolean(),
     isAiAssisted: v.boolean(),
     preserveArchaic: v.boolean(),
     createdAt: v.number(),
     createdBy: v.union(v.literal("system"), v.literal("ai"), v.literal("user")),
     parentRevisionId: v.optional(v.id("cleanupRevisions")),
-    sizeBytes: v.optional(v.number()),  // Track cleaned size
-    chapterIds: v.optional(v.array(v.id("cleanupChapters"))),  // References to chapter records
+    sizeBytes: v.optional(v.number()), // Track cleaned size
+    chapterIds: v.optional(v.array(v.id("cleanupChapters"))), // References to chapter records
     // DEPRECATED: content stored directly (removed due to 1MB limit)
     content: v.optional(v.string()),
   })
@@ -159,13 +138,13 @@ const applicationTables = {
       v.literal("appendix"),
       v.literal("body"),
     ),
-    fileId: v.optional(v.id("_storage")),  // Reference to stored chapter content file
+    fileId: v.optional(v.id("_storage")), // Reference to stored chapter content file
     startOffset: v.number(),
     endOffset: v.number(),
     detectedHeading: v.optional(v.string()),
     isUserConfirmed: v.boolean(),
     createdAt: v.number(),
-    sizeBytes: v.optional(v.number()),  // Track chapter content size
+    sizeBytes: v.optional(v.number()), // Track chapter content size
     // DEPRECATED: content stored directly (removed due to 1MB limit)
     content: v.optional(v.string()),
   })
@@ -184,7 +163,12 @@ const applicationTables = {
       v.literal("ambiguous_punctuation"),
       v.literal("chapter_boundary_disputed"),
     ),
-    status: v.union(v.literal("unresolved"), v.literal("confirmed"), v.literal("rejected"), v.literal("overridden")),
+    status: v.union(
+      v.literal("unresolved"),
+      v.literal("confirmed"),
+      v.literal("rejected"),
+      v.literal("overridden"),
+    ),
     chapterId: v.optional(v.id("cleanupChapters")),
     startOffset: v.number(),
     endOffset: v.number(),
@@ -204,17 +188,13 @@ const applicationTables = {
   cleanupJobs: defineTable({
     bookId: v.id("books"),
     revisionId: v.optional(v.id("cleanupRevisions")),
-    stage: v.union(
+    stage: cleanupJobStageValidator,
+    status: v.union(
       v.literal("queued"),
-      v.literal("loading_original"),
-      v.literal("boilerplate_removal"),
-      v.literal("paragraph_unwrap"),
-      v.literal("chapter_detection"),
-      v.literal("punctuation_normalization"),
+      v.literal("running"),
       v.literal("completed"),
       v.literal("failed"),
     ),
-    status: v.union(v.literal("queued"), v.literal("running"), v.literal("completed"), v.literal("failed")),
     progress: v.number(),
     flagsCreated: v.number(),
     chaptersDetected: v.optional(v.number()),

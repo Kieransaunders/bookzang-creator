@@ -327,21 +327,29 @@ export function ImportModal({ onClose }: ImportModalProps) {
 
           {/* Duplicate Warning */}
           {duplicateBlock && (
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+            <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/15 p-5">
               <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 flex-shrink-0 text-amber-400" size={18} />
+                <AlertCircle className="mt-0.5 flex-shrink-0 text-amber-400" size={22} />
                 <div className="flex-1">
-                  <p className="font-medium text-amber-200 mb-1">Duplicate detected</p>
-                  <p className="text-sm text-amber-200/70">{duplicateBlock.message}</p>
-                  <label className="flex items-center gap-2 mt-3 text-sm text-amber-100">
+                  <p className="font-semibold text-amber-200 mb-1">Duplicate Detected</p>
+                  <p className="text-sm text-amber-200/80 mb-3">{duplicateBlock.message}</p>
+                  <div className="flex items-center gap-3 p-3 bg-amber-500/10 rounded-lg border border-amber-500/30">
                     <input
+                      id="override-duplicate"
                       type="checkbox"
                       checked={overrideDuplicate}
                       onChange={(e) => setOverrideDuplicate(e.target.checked)}
-                      className="rounded border-amber-500/50 bg-amber-500/10"
+                      className="w-5 h-5 rounded border-amber-500/50 bg-amber-500/10 cursor-pointer"
                     />
-                    Import as duplicate anyway
-                  </label>
+                    <label htmlFor="override-duplicate" className="flex-1 text-sm font-medium text-amber-100 cursor-pointer">
+                      I understand — import as duplicate anyway
+                    </label>
+                  </div>
+                  {!overrideDuplicate && (
+                    <p className="text-xs text-amber-300/70 mt-2">
+                      Check the box above and click "Import Duplicate" to proceed.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

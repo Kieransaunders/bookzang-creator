@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { mainJobStageValidator } from "./jobStages";
 
 const canonicalStatuses = ["queued", "running", "completed", "failed"] as const;
 
@@ -195,16 +196,7 @@ export const updateStatus = mutation({
       v.literal("completed"),
       v.literal("failed"),
     ),
-    stage: v.optional(
-      v.union(
-        v.literal("queued"),
-        v.literal("loading_file"),
-        v.literal("parsing_metadata"),
-        v.literal("persisting_metadata"),
-        v.literal("completed"),
-        v.literal("failed"),
-      ),
-    ),
+    stage: v.optional(mainJobStageValidator),
     progress: v.optional(v.number()),
     logs: v.optional(v.string()),
     error: v.optional(v.string()),

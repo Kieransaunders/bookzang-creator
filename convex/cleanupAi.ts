@@ -1,18 +1,28 @@
 /**
  * AI-Assisted Cleanup Pipeline
- * 
+ *
  * Internal actions for running AI cleanup passes on book text.
- * Orchestrates the flow: deterministic baseline -> AI patch proposals -> 
+ * Orchestrates the flow: deterministic baseline -> AI patch proposals ->
  * validated revision write -> unresolved low-confidence flags.
- * 
+ *
  * This implements CLEAN-03 from the phase plan.
  */
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, query, internalQuery } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  query,
+  internalQuery,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { createCleanupAiClient } from "./cleanupAiClient";
-import { buildSegmentPrompt, validateCleanupResponse, type CleanupPatch } from "./cleanupPrompts";
+import {
+  buildSegmentPrompt,
+  validateCleanupResponse,
+  type CleanupPatch,
+} from "./cleanupPrompts";
+import { aiCleanupStageValidator } from "./jobStages";
 
 /**
  * Configuration for AI cleanup batch processing
@@ -29,10 +39,10 @@ const AI_CLEANUP_CONFIG = {
 
 /**
  * Internal action to run AI cleanup pass on a book
- * 
+ *
  * This is the main entry point for AI-assisted cleanup.
  * It takes the latest deterministic revision and produces a new AI-assisted revision.
- * 
+ *
  * Flow:
  * 1. Get latest revision for book
  * 2. Split content into segments
@@ -41,259 +51,311 @@ const AI_CLEANUP_CONFIG = {
  * 5. Apply patches to create new revision
  * 6. Create flags for low-confidence patches
  */
-export const runCleanupAiPass: ReturnType<typeof internalAction> = internalAction({
-  args: {
-    bookId: v.id("books"),
-    revisionId: v.id("cleanupRevisions"),
-    jobId: v.optional(v.id("cleanupJobs")),
-  },
-  returns: v.object({
-    success: v.boolean(),
-    newRevisionId: v.optional(v.id("cleanupRevisions")),
-    patchesApplied: v.optional(v.number()),
-    lowConfidenceFlags: v.optional(v.number()),
-    error: v.optional(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      // Update job status if provided
-      if (args.jobId) {
-        await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
-          jobId: args.jobId,
-          stage: "ai_analysis",
-          progress: 10,
-        });
-      }
+export const runCleanupAiPass: ReturnType<typeof internalAction> =
+  internalAction({
+    args: {
+      bookId: v.id("books"),
+      revisionId: v.id("cleanupRevisions"),
+      jobId: v.optional(v.id("cleanupJobs")),
+    },
+    returns: v.object({
+      success: v.boolean(),
+      newRevisionId: v.optional(v.id("cleanupRevisions")),
+      patchesApplied: v.optional(v.number()),
+      lowConfidenceFlags: v.optional(v.number()),
+      error: v.optional(v.string()),
+    }),
+    handler: async (ctx, args) => {
+      try {
+        // Update job status if provided
+        if (args.jobId) {
+          await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
+            jobId: args.jobId,
+            stage: "ai_analysis",
+            progress: 10,
+          });
+        }
 
-      // Get the revision to process via query
-      const revision = await ctx.runQuery(internal.cleanupAi.getRevisionForAi, {
-        revisionId: args.revisionId,
-      });
-      
-      if (!revision) {
-        throw new Error(`Revision ${args.revisionId} not found`);
-      }
+        // Get the revision to process via query
+        const revision = await ctx.runQuery(
+          internal.cleanupAi.getRevisionForAi,
+          {
+            revisionId: args.revisionId,
+          },
+        );
 
-      // Don't run AI on already AI-assisted revisions (prevent double-processing)
-      if (revision.isAiAssisted) {
-        throw new Error("Revision is already AI-assisted; create new deterministic revision first");
-      }
+        if (!revision) {
+          throw new Error(`Revision ${args.revisionId} not found`);
+        }
 
-      // Read content from file storage (not in database due to 1MB limit)
-      if (!revision.fileId) {
-        throw new Error(`Revision ${args.revisionId} has no fileId (legacy data)`);
-      }
-      const contentBlob = await ctx.storage.get(revision.fileId);
-      if (!contentBlob) {
-        throw new Error(`Content file ${revision.fileId} not found for revision ${args.revisionId}`);
-      }
-      const content = await contentBlob.text();
+        // Don't run AI on already AI-assisted revisions (prevent double-processing)
+        if (revision.isAiAssisted) {
+          throw new Error(
+            "Revision is already AI-assisted; create new deterministic revision first",
+          );
+        }
 
-      // Get chapters for context
-      const chapters = await ctx.runQuery(internal.cleanupAi.getChaptersForAi, {
-        revisionId: args.revisionId,
-      });
+        // Read content from file storage (not in database due to 1MB limit)
+        if (!revision.fileId) {
+          throw new Error(
+            `Revision ${args.revisionId} has no fileId (legacy data)`,
+          );
+        }
+        const contentBlob = await ctx.storage.get(revision.fileId);
+        if (!contentBlob) {
+          throw new Error(
+            `Content file ${revision.fileId} not found for revision ${args.revisionId}`,
+          );
+        }
+        const content = await contentBlob.text();
 
-      // Create AI client
-      const aiClient = createCleanupAiClient();
+        // Get chapters for context
+        const chapters = await ctx.runQuery(
+          internal.cleanupAi.getChaptersForAi,
+          {
+            revisionId: args.revisionId,
+          },
+        );
 
-      if (!aiClient.isConfigured()) {
-        console.log("AI client not configured, skipping AI cleanup pass");
-        // Return success but indicate no processing occurred
-        return {
-          success: true,
-          patchesApplied: 0,
-          lowConfidenceFlags: 0,
-          error: "AI client not configured (KIMI_API_KEY not set)",
-        };
-      }
+        // Create AI client
+        const aiClient = createCleanupAiClient();
 
-      // Split content into segments
-      const segments = splitIntoSegments(content, AI_CLEANUP_CONFIG.MAX_SEGMENT_SIZE);
-      console.log(`Processing ${segments.length} segments for book ${args.bookId}`);
+        if (!aiClient.isConfigured()) {
+          console.log("AI client not configured, skipping AI cleanup pass");
+          // Return success but indicate no processing occurred
+          return {
+            success: true,
+            patchesApplied: 0,
+            lowConfidenceFlags: 0,
+            error: "AI client not configured (KIMI_API_KEY not set)",
+          };
+        }
 
-      if (args.jobId) {
-        await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
-          jobId: args.jobId,
-          stage: "ai_processing",
-          progress: 20,
-        });
-      }
-
-      // Process each segment
-      const allPatches: CleanupPatch[] = [];
-      const segmentSummaries: string[] = [];
-
-      for (let i = 0; i < segments.length; i++) {
-        const segment = segments[i];
-        const progress = 20 + Math.floor((i / segments.length) * 60);
+        // Split content into segments
+        const segments = splitIntoSegments(
+          content,
+          AI_CLEANUP_CONFIG.MAX_SEGMENT_SIZE,
+        );
+        console.log(
+          `Processing ${segments.length} segments for book ${args.bookId}`,
+        );
 
         if (args.jobId) {
           await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
             jobId: args.jobId,
             stage: "ai_processing",
-            progress,
+            progress: 20,
           });
         }
 
-        // Find which chapter this segment belongs to
-        const chapterContext = findChapterForPosition(chapters, segment.startOffset);
+        // Process each segment
+        const allPatches: CleanupPatch[] = [];
+        const segmentSummaries: string[] = [];
 
-        try {
-          // Request cleanup from AI
-          const aiResponse = await aiClient.requestCleanupPatches(segment.text, {
-            chapterTitle: chapterContext?.title,
-            previousContext: i > 0 ? segments[i - 1].text : undefined,
-            nextContext: i < segments.length - 1 ? segments[i + 1].text : undefined,
-          });
+        for (let i = 0; i < segments.length; i++) {
+          const segment = segments[i];
+          const progress = 20 + Math.floor((i / segments.length) * 60);
 
-          // Adjust patch offsets to be relative to full document
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const adjustedPatches = aiResponse.patches.map((patch: any) => ({
-            start: patch.start + segment.startOffset,
-            end: patch.end + segment.startOffset,
-            original: patch.original,
-            replacement: patch.replacement,
-            confidence: patch.confidence,
-            reason: patch.reason,
-            category: patch.category,
-          }));
-
-          allPatches.push(...adjustedPatches);
-          segmentSummaries.push(aiResponse.summary);
-
-          console.log(`Segment ${i + 1}: ${adjustedPatches.length} patches (${aiResponse.patches.filter(p => p.confidence === "low").length} low confidence)`);
-
-          // Rate limiting delay
-          if (i < segments.length - 1) {
-            await sleep(AI_CLEANUP_CONFIG.RATE_LIMIT_DELAY_MS);
+          if (args.jobId) {
+            await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
+              jobId: args.jobId,
+              stage: "ai_processing",
+              progress,
+            });
           }
-        } catch (error) {
-          console.error(`Error processing segment ${i + 1}:`, error);
-          // Continue with other segments rather than failing entirely
-          segmentSummaries.push(`Segment ${i + 1}: Error - ${error instanceof Error ? error.message : String(error)}`);
+
+          // Find which chapter this segment belongs to
+          const chapterContext = findChapterForPosition(
+            chapters,
+            segment.startOffset,
+          );
+
+          try {
+            // Request cleanup from AI
+            const aiResponse = await aiClient.requestCleanupPatches(
+              segment.text,
+              {
+                chapterTitle: chapterContext?.title,
+                previousContext: i > 0 ? segments[i - 1].text : undefined,
+                nextContext:
+                  i < segments.length - 1 ? segments[i + 1].text : undefined,
+              },
+            );
+
+            // Adjust patch offsets to be relative to full document
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const adjustedPatches = aiResponse.patches.map((patch: any) => ({
+              start: patch.start + segment.startOffset,
+              end: patch.end + segment.startOffset,
+              original: patch.original,
+              replacement: patch.replacement,
+              confidence: patch.confidence,
+              reason: patch.reason,
+              category: patch.category,
+            }));
+
+            allPatches.push(...adjustedPatches);
+            segmentSummaries.push(aiResponse.summary);
+
+            console.log(
+              `Segment ${i + 1}: ${adjustedPatches.length} patches (${aiResponse.patches.filter((p) => p.confidence === "low").length} low confidence)`,
+            );
+
+            // Rate limiting delay
+            if (i < segments.length - 1) {
+              await sleep(AI_CLEANUP_CONFIG.RATE_LIMIT_DELAY_MS);
+            }
+          } catch (error) {
+            console.error(`Error processing segment ${i + 1}:`, error);
+            // Continue with other segments rather than failing entirely
+            segmentSummaries.push(
+              `Segment ${i + 1}: Error - ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
-      }
 
-      if (args.jobId) {
-        await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
-          jobId: args.jobId,
-          stage: "applying_patches",
-          progress: 80,
-        });
-      }
+        if (args.jobId) {
+          await ctx.runMutation(internal.cleanupAi.updateJobAiStage, {
+            jobId: args.jobId,
+            stage: "applying_patches",
+            progress: 80,
+          });
+        }
 
-      // Validate all patches against full text
-      const validatedResponse = validateCleanupResponse(
-        {
-          patches: allPatches,
-          summary: segmentSummaries.join("; "),
-          preservationNotes: [],
-          stats: {
-            highConfidencePatches: allPatches.filter(p => p.confidence === "high").length,
-            lowConfidencePatches: allPatches.filter(p => p.confidence === "low").length,
-            ocrErrorsFixed: allPatches.filter(p => p.category === "ocr_error").length,
-            punctuationNormalizations: allPatches.filter(p => p.category === "punctuation_normalization").length,
+        // Validate all patches against full text
+        const validatedResponse = validateCleanupResponse(
+          {
+            patches: allPatches,
+            summary: segmentSummaries.join("; "),
+            preservationNotes: [],
+            stats: {
+              highConfidencePatches: allPatches.filter(
+                (p) => p.confidence === "high",
+              ).length,
+              lowConfidencePatches: allPatches.filter(
+                (p) => p.confidence === "low",
+              ).length,
+              ocrErrorsFixed: allPatches.filter(
+                (p) => p.category === "ocr_error",
+              ).length,
+              punctuationNormalizations: allPatches.filter(
+                (p) => p.category === "punctuation_normalization",
+              ).length,
+            },
           },
-        },
-        content
-      );
+          content,
+        );
 
-      if (!validatedResponse.success) {
-        throw new Error(`Patch validation failed: ${validatedResponse.error}`);
-      }
+        if (!validatedResponse.success) {
+          throw new Error(
+            `Patch validation failed: ${validatedResponse.error}`,
+          );
+        }
 
-      // Apply patches and create new revision
-      // Schedule action since queries can't call actions directly
-      await ctx.scheduler.runAfter(0, internal.cleanupPatchApply.applyPatchesAndCreateRevision, {
-        bookId: args.bookId,
-        parentRevisionId: args.revisionId,
-        patches: validatedResponse.data.patches,
-        summary: validatedResponse.data.summary,
-        preservationNotes: validatedResponse.data.preservationNotes,
-      });
+        // Apply patches and create new revision
+        // Schedule action since queries can't call actions directly
+        await ctx.scheduler.runAfter(
+          0,
+          internal.cleanupPatchApply.applyPatchesAndCreateRevision,
+          {
+            bookId: args.bookId,
+            parentRevisionId: args.revisionId,
+            patches: validatedResponse.data.patches,
+            summary: validatedResponse.data.summary,
+            preservationNotes: validatedResponse.data.preservationNotes,
+          },
+        );
 
-      // Calculate metrics
-      const appliedCount = validatedResponse.data.patches.filter(p => p.confidence === "high").length;
-      const flagsCreated = validatedResponse.data.patches.filter(p => p.confidence === "low").length;
+        // Calculate metrics
+        const appliedCount = validatedResponse.data.patches.filter(
+          (p) => p.confidence === "high",
+        ).length;
+        const flagsCreated = validatedResponse.data.patches.filter(
+          (p) => p.confidence === "low",
+        ).length;
 
-      // Return placeholder result - actual revision will be created async
-      const result = {
-        success: true,
-        appliedCount,
-        flagsCreated,
-      };
+        // Return placeholder result - actual revision will be created async
+        const result = {
+          success: true,
+          appliedCount,
+          flagsCreated,
+        };
 
-      if (args.jobId) {
-        await ctx.runMutation(internal.cleanupAi.completeAiJob, {
-          jobId: args.jobId,
+        if (args.jobId) {
+          await ctx.runMutation(internal.cleanupAi.completeAiJob, {
+            jobId: args.jobId,
+            patchesApplied: result.appliedCount,
+            flagsCreated: result.flagsCreated,
+          });
+        }
+
+        return {
+          success: true,
           patchesApplied: result.appliedCount,
-          flagsCreated: result.flagsCreated,
-        });
-      }
+          lowConfidenceFlags: result.flagsCreated,
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.error("AI cleanup pass failed:", errorMessage);
 
-      return {
-        success: true,
-        patchesApplied: result.appliedCount,
-        lowConfidenceFlags: result.flagsCreated,
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("AI cleanup pass failed:", errorMessage);
+        if (args.jobId) {
+          await ctx.runMutation(internal.cleanupAi.failAiJob, {
+            jobId: args.jobId,
+            error: errorMessage,
+          });
+        }
 
-      if (args.jobId) {
-        await ctx.runMutation(internal.cleanupAi.failAiJob, {
-          jobId: args.jobId,
+        return {
+          success: false,
           error: errorMessage,
-        });
+        };
       }
-
-      return {
-        success: false,
-        error: errorMessage,
-      };
-    }
-  },
-});
+    },
+  });
 
 /**
  * Start AI cleanup for a book (internal mutation)
  * Creates a job and schedules the AI action
  */
-export const startAiCleanup: ReturnType<typeof internalMutation> = internalMutation({
-  args: {
-    bookId: v.id("books"),
-    revisionId: v.id("cleanupRevisions"),
-  },
-  returns: v.object({
-    jobId: v.id("cleanupJobs"),
-  }),
-  handler: async (ctx, args) => {
-    // Create cleanup job
-    const jobId = await ctx.db.insert("cleanupJobs", {
-      bookId: args.bookId,
-      stage: "queued",
-      status: "queued",
-      progress: 0,
-      flagsCreated: 0,
-      queuedAt: Date.now(),
-    });
+export const startAiCleanup: ReturnType<typeof internalMutation> =
+  internalMutation({
+    args: {
+      bookId: v.id("books"),
+      revisionId: v.id("cleanupRevisions"),
+    },
+    returns: v.object({
+      jobId: v.id("cleanupJobs"),
+    }),
+    handler: async (ctx, args) => {
+      // Create cleanup job
+      const jobId = await ctx.db.insert("cleanupJobs", {
+        bookId: args.bookId,
+        stage: "queued",
+        status: "queued",
+        progress: 0,
+        flagsCreated: 0,
+        queuedAt: Date.now(),
+      });
 
-    // Schedule AI pass
-    await ctx.scheduler.runAfter(0, internal.cleanupAi.runCleanupAiPass, {
-      bookId: args.bookId,
-      revisionId: args.revisionId,
-      jobId,
-    });
+      // Schedule AI pass
+      await ctx.scheduler.runAfter(0, internal.cleanupAi.runCleanupAiPass, {
+        bookId: args.bookId,
+        revisionId: args.revisionId,
+        jobId,
+      });
 
-    return { jobId };
-  },
-});
+      return { jobId };
+    },
+  });
 
 /**
  * Split text into overlapping segments for AI processing
  */
-function splitIntoSegments(text: string, maxSize: number): Array<{ text: string; startOffset: number }> {
+function splitIntoSegments(
+  text: string,
+  maxSize: number,
+): Array<{ text: string; startOffset: number }> {
   const segments: Array<{ text: string; startOffset: number }> = [];
 
   // If text is small enough, process as single segment
@@ -350,7 +412,7 @@ function findChapterForPosition(
     startOffset: number;
     endOffset: number;
   }>,
-  position: number
+  position: number,
 ): { chapterNumber: number; title: string } | undefined {
   for (const chapter of chapters) {
     if (position >= chapter.startOffset && position < chapter.endOffset) {
@@ -367,7 +429,7 @@ function findChapterForPosition(
  * Sleep helper for rate limiting
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // =============================================================================
@@ -377,69 +439,62 @@ function sleep(ms: number): Promise<void> {
 /**
  * Update job AI stage
  */
-export const updateJobAiStage: ReturnType<typeof internalMutation> = internalMutation({
-  args: {
-    jobId: v.id("cleanupJobs"),
-    stage: v.union(
-      v.literal("queued"),
-      v.literal("loading_original"),
-      v.literal("boilerplate_removal"),
-      v.literal("paragraph_unwrap"),
-      v.literal("chapter_detection"),
-      v.literal("punctuation_normalization"),
-      v.literal("completed"),
-      v.literal("failed"),
-    ),
-    progress: v.number(),
-    segmentInfo: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const update: Record<string, unknown> = {
-      stage: args.stage,
-      progress: args.progress,
-    };
+export const updateJobAiStage: ReturnType<typeof internalMutation> =
+  internalMutation({
+    args: {
+      jobId: v.id("cleanupJobs"),
+      stage: aiCleanupStageValidator,
+      progress: v.number(),
+      segmentInfo: v.optional(v.string()),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+      const update: Record<string, unknown> = {
+        stage: args.stage,
+        progress: args.progress,
+      };
 
-    if (args.segmentInfo) {
-      update.segmentInfo = args.segmentInfo;
-    }
-
-    if (args.stage !== "queued") {
-      const job = await ctx.db.get(args.jobId);
-      if (job && !job.startedAt) {
-        update.startedAt = Date.now();
-        update.status = "running";
+      if (args.segmentInfo) {
+        update.segmentInfo = args.segmentInfo;
       }
-    }
 
-    await ctx.db.patch(args.jobId, update);
-    return null;
-  },
-});
+      if (args.stage !== "queued") {
+        const job = await ctx.db.get(args.jobId);
+        if (job && !job.startedAt) {
+          update.startedAt = Date.now();
+          update.status = "running";
+        }
+      }
+
+      await ctx.db.patch(args.jobId, update);
+      return null;
+    },
+  });
 
 /**
  * Complete AI cleanup job
  */
-export const completeAiJob: ReturnType<typeof internalMutation> = internalMutation({
-  args: {
-    jobId: v.id("cleanupJobs"),
-    newRevisionId: v.id("cleanupRevisions"),
-    patchesApplied: v.number(),
-    flagsCreated: v.number(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.jobId, {
-      status: "completed",
-      stage: "completed",
-      revisionId: args.newRevisionId,
-      flagsCreated: args.flagsCreated,
-      progress: 100,
-      completedAt: Date.now(),
-    });
-    return null;
-  },
-});
+export const completeAiJob: ReturnType<typeof internalMutation> =
+  internalMutation({
+    args: {
+      jobId: v.id("cleanupJobs"),
+      newRevisionId: v.id("cleanupRevisions"),
+      patchesApplied: v.number(),
+      flagsCreated: v.number(),
+    },
+    returns: v.null(),
+    handler: async (ctx, args) => {
+      await ctx.db.patch(args.jobId, {
+        status: "completed",
+        stage: "completed",
+        revisionId: args.newRevisionId,
+        flagsCreated: args.flagsCreated,
+        progress: 100,
+        completedAt: Date.now(),
+      });
+      return null;
+    },
+  });
 
 /**
  * Fail AI cleanup job
@@ -466,58 +521,67 @@ export const failAiJob: ReturnType<typeof internalMutation> = internalMutation({
 /**
  * Get revision for processing
  */
-export const getRevisionForAi: ReturnType<typeof internalQuery> = internalQuery({
-  args: {
-    revisionId: v.id("cleanupRevisions"),
+export const getRevisionForAi: ReturnType<typeof internalQuery> = internalQuery(
+  {
+    args: {
+      revisionId: v.id("cleanupRevisions"),
+    },
+    returns: v.union(
+      v.null(),
+      v.object({
+        _id: v.id("cleanupRevisions"),
+        bookId: v.id("books"),
+        revisionNumber: v.number(),
+        fileId: v.optional(v.id("_storage")),
+        isAiAssisted: v.boolean(),
+      }),
+    ),
+    handler: async (ctx, args) => {
+      const revision = await ctx.db.get(args.revisionId);
+      if (!revision) return null;
+      return {
+        _id: revision._id,
+        bookId: revision.bookId,
+        revisionNumber: revision.revisionNumber,
+        fileId: revision.fileId,
+        isAiAssisted: revision.isAiAssisted,
+      };
+    },
   },
-  returns: v.union(v.null(), v.object({
-    _id: v.id("cleanupRevisions"),
-    bookId: v.id("books"),
-    revisionNumber: v.number(),
-    fileId: v.optional(v.id("_storage")),
-    isAiAssisted: v.boolean(),
-  })),
-  handler: async (ctx, args) => {
-    const revision = await ctx.db.get(args.revisionId);
-    if (!revision) return null;
-    return {
-      _id: revision._id,
-      bookId: revision.bookId,
-      revisionNumber: revision.revisionNumber,
-      fileId: revision.fileId,
-      isAiAssisted: revision.isAiAssisted,
-    };
-  },
-});
+);
 
 /**
  * Get chapters for revision
  */
-export const getChaptersForAi: ReturnType<typeof internalQuery> = internalQuery({
-  args: {
-    revisionId: v.id("cleanupRevisions"),
-  },
-  returns: v.array(v.object({
-    chapterNumber: v.number(),
-    title: v.string(),
-    startOffset: v.number(),
-    endOffset: v.number(),
-  })),
-  handler: async (ctx, args) => {
-    const chapters = await ctx.db
-      .query("cleanupChapters")
-      .withIndex("by_revision_id", (q) => q.eq("revisionId", args.revisionId))
-      .order("asc")
-      .collect();
+export const getChaptersForAi: ReturnType<typeof internalQuery> = internalQuery(
+  {
+    args: {
+      revisionId: v.id("cleanupRevisions"),
+    },
+    returns: v.array(
+      v.object({
+        chapterNumber: v.number(),
+        title: v.string(),
+        startOffset: v.number(),
+        endOffset: v.number(),
+      }),
+    ),
+    handler: async (ctx, args) => {
+      const chapters = await ctx.db
+        .query("cleanupChapters")
+        .withIndex("by_revision_id", (q) => q.eq("revisionId", args.revisionId))
+        .order("asc")
+        .collect();
 
-    return chapters.map(ch => ({
-      chapterNumber: ch.chapterNumber,
-      title: ch.title,
-      startOffset: ch.startOffset,
-      endOffset: ch.endOffset,
-    }));
+      return chapters.map((ch) => ({
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        startOffset: ch.startOffset,
+        endOffset: ch.endOffset,
+      }));
+    },
   },
-});
+);
 
 // =============================================================================
 // Public Queries
@@ -530,11 +594,14 @@ export const getAiCleanupStatus = query({
   args: {
     bookId: v.id("books"),
   },
-  returns: v.union(v.null(), v.object({
-    job: v.any(),
-    latestRevision: v.any(),
-    canRunAi: v.boolean(),
-  })),
+  returns: v.union(
+    v.null(),
+    v.object({
+      job: v.any(),
+      latestRevision: v.any(),
+      canRunAi: v.boolean(),
+    }),
+  ),
   handler: async (ctx, args) => {
     // Get latest AI-related job
     const jobs = await ctx.db

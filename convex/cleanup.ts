@@ -1,15 +1,25 @@
 /**
  * Public cleanup API surface
- * 
+ *
  * Queries and mutations for starting cleanup, retrieving review data,
  * and managing the cleanup pipeline.
  */
 
 import { v, type GenericId as Id } from "convex/values";
-import { query, mutation, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import {
+  query,
+  mutation,
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { runDeterministicCleanup } from "./cleanupPipeline";
 import { detectChapterBoundaries } from "./cleanupChaptering";
+import {
+  deterministicCleanupStageValidator,
+  mapDeterministicCleanupStageToMainJobStage,
+} from "./jobStages";
 
 /**
  * Start deterministic cleanup for a book
@@ -34,9 +44,10 @@ export const startCleanup = mutation({
     }
 
     // Check for existing cleanup job
-    const existingJob = await ctx.db.query("cleanupJobs")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
-      .filter(q => q.eq(q.field("status"), "running"))
+    const existingJob = await ctx.db
+      .query("cleanupJobs")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
+      .filter((q) => q.eq(q.field("status"), "running"))
       .first();
 
     if (existingJob) {
@@ -80,186 +91,199 @@ export const startCleanup = mutation({
  * Internal action to run the full cleanup pipeline
  * Stores all content in File Storage to avoid 1MB document limit
  */
-export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAction({
-  args: {
-    bookId: v.id("books"),
-    fileId: v.id("_storage"),
-    jobId: v.id("cleanupJobs"),
-    mainJobId: v.optional(v.id("jobs")),
-    preserveArchaic: v.boolean(),
-  },
-  returns: v.object({
-    success: v.boolean(),
-    revisionId: v.optional(v.id("cleanupRevisions")),
-    chaptersDetected: v.optional(v.number()),
-    flagsCreated: v.optional(v.number()),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      // Update job to loading stage
-      await ctx.runMutation(internal.cleanup.updateJobStage, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        stage: "loading_original",
-        progress: 10,
-      });
-
-      // Load the file content
-      const blob = await ctx.storage.get(args.fileId);
-      if (!blob) {
-        throw new Error(`File ${args.fileId} not found in storage`);
-      }
-
-      const originalContent = await blob.text();
-      const originalSizeBytes = new Blob([originalContent]).size;
-
-      // Store original reference with size tracking
-      await ctx.runMutation(internal.cleanup.insertOriginal, {
-        bookId: args.bookId,
-        fileId: args.fileId,
-        sourceFormat: "gutenberg_txt",
-        sizeBytes: originalSizeBytes,
-      });
-
-      // Run deterministic cleanup
-      await ctx.runMutation(internal.cleanup.updateJobStage, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        stage: "boilerplate_removal",
-        progress: 30,
-      });
-
-      const cleanupResult = runDeterministicCleanup(originalContent, {
-        preserveArchaic: args.preserveArchaic,
-        unwrapParagraphs: true,
-        normalizePunctuation: true,
-      });
-
-      // Store cleaned content as a file (not in database - 1MB limit)
-      await ctx.runMutation(internal.cleanup.updateJobStage, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        stage: "punctuation_normalization",
-        progress: 50,
-      });
-
-      const cleanedBlob = new Blob([cleanupResult.content], { type: "text/plain" });
-      const cleanedFileId = await ctx.storage.store(cleanedBlob);
-      const cleanedSizeBytes = cleanedBlob.size;
-
-      const revisionId = await ctx.runMutation(internal.cleanupPipeline.createCleanupRevision, {
-        bookId: args.bookId,
-        revisionNumber: 1,
-        fileId: cleanedFileId,
-        isDeterministic: true,
-        isAiAssisted: false,
-        preserveArchaic: args.preserveArchaic,
-        createdBy: "system",
-        sizeBytes: cleanedSizeBytes,
-      });
-
-      // Detect and create chapters
-      await ctx.runMutation(internal.cleanup.updateJobStage, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        stage: "chapter_detection",
-        progress: 70,
-      });
-
-      const chapterResult = detectChapterBoundaries(cleanupResult.content);
-
-      // Store each chapter content as a separate file
-      const chaptersForDb = [];
-      for (const ch of chapterResult.chapters) {
-        const chapterBlob = new Blob([ch.content], { type: "text/plain" });
-        const chapterFileId = await ctx.storage.store(chapterBlob);
-        
-        chaptersForDb.push({
-          chapterNumber: ch.chapterNumber,
-          title: ch.title,
-          type: ch.type,
-          fileId: chapterFileId,
-          startOffset: ch.startOffset,
-          endOffset: ch.endOffset,
-          detectedHeading: ch.detectedHeading ?? undefined,
-          isUserConfirmed: ch.isUserConfirmed,
-          confidence: ch.confidence,
-          isOcrCorrupted: ch.isOcrCorrupted,
-          sizeBytes: chapterBlob.size,
+export const runCleanupPipeline: ReturnType<typeof internalAction> =
+  internalAction({
+    args: {
+      bookId: v.id("books"),
+      fileId: v.id("_storage"),
+      jobId: v.id("cleanupJobs"),
+      mainJobId: v.optional(v.id("jobs")),
+      preserveArchaic: v.boolean(),
+    },
+    returns: v.object({
+      success: v.boolean(),
+      revisionId: v.optional(v.id("cleanupRevisions")),
+      chaptersDetected: v.optional(v.number()),
+      flagsCreated: v.optional(v.number()),
+    }),
+    handler: async (ctx, args) => {
+      try {
+        // Update job to loading stage
+        await ctx.runMutation(internal.cleanup.updateJobStage, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          stage: "loading_original",
+          progress: 10,
         });
-      }
 
-      const chapterIds = await ctx.runMutation(internal.cleanupPipeline.createChapterRecords, {
-        bookId: args.bookId,
-        revisionId,
-        chapters: chaptersForDb,
-      });
+        // Load the file content
+        const blob = await ctx.storage.get(args.fileId);
+        if (!blob) {
+          throw new Error(`File ${args.fileId} not found in storage`);
+        }
 
-      // Create OCR flags for corrupted headings
-      for (let i = 0; i < chapterResult.chapters.length; i++) {
-        const ch = chapterResult.chapters[i];
-        if (ch.isOcrCorrupted) {
-          await ctx.runMutation(internal.cleanupFlags.createOcrChapterFlag, {
+        const originalContent = await blob.text();
+        const originalSizeBytes = new Blob([originalContent]).size;
+
+        // Store original reference with size tracking
+        await ctx.runMutation(internal.cleanup.insertOriginal, {
+          bookId: args.bookId,
+          fileId: args.fileId,
+          sourceFormat: "gutenberg_txt",
+          sizeBytes: originalSizeBytes,
+        });
+
+        // Run deterministic cleanup
+        await ctx.runMutation(internal.cleanup.updateJobStage, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          stage: "boilerplate_removal",
+          progress: 30,
+        });
+
+        const cleanupResult = runDeterministicCleanup(originalContent, {
+          preserveArchaic: args.preserveArchaic,
+          unwrapParagraphs: true,
+          normalizePunctuation: true,
+        });
+
+        // Store cleaned content as a file (not in database - 1MB limit)
+        await ctx.runMutation(internal.cleanup.updateJobStage, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          stage: "punctuation_normalization",
+          progress: 50,
+        });
+
+        const cleanedBlob = new Blob([cleanupResult.content], {
+          type: "text/plain",
+        });
+        const cleanedFileId = await ctx.storage.store(cleanedBlob);
+        const cleanedSizeBytes = cleanedBlob.size;
+
+        const revisionId = await ctx.runMutation(
+          internal.cleanupPipeline.createCleanupRevision,
+          {
             bookId: args.bookId,
-            revisionId,
-            chapterId: chapterIds[i],
-            rawHeading: ch.detectedHeading || "Unknown",
-            lineNumber: 0,
+            revisionNumber: 1,
+            fileId: cleanedFileId,
+            isDeterministic: true,
+            isAiAssisted: false,
+            preserveArchaic: args.preserveArchaic,
+            createdBy: "system",
+            sizeBytes: cleanedSizeBytes,
+          },
+        );
+
+        // Detect and create chapters
+        await ctx.runMutation(internal.cleanup.updateJobStage, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          stage: "chapter_detection",
+          progress: 70,
+        });
+
+        const chapterResult = detectChapterBoundaries(cleanupResult.content);
+
+        // Store each chapter content as a separate file
+        const chaptersForDb = [];
+        for (const ch of chapterResult.chapters) {
+          const chapterBlob = new Blob([ch.content], { type: "text/plain" });
+          const chapterFileId = await ctx.storage.store(chapterBlob);
+
+          chaptersForDb.push({
+            chapterNumber: ch.chapterNumber,
+            title: ch.title,
+            type: ch.type,
+            fileId: chapterFileId,
+            startOffset: ch.startOffset,
+            endOffset: ch.endOffset,
+            detectedHeading: ch.detectedHeading ?? undefined,
+            isUserConfirmed: ch.isUserConfirmed,
+            confidence: ch.confidence,
+            isOcrCorrupted: ch.isOcrCorrupted,
+            sizeBytes: chapterBlob.size,
           });
         }
+
+        const chapterIds = await ctx.runMutation(
+          internal.cleanupPipeline.createChapterRecords,
+          {
+            bookId: args.bookId,
+            revisionId,
+            chapters: chaptersForDb,
+          },
+        );
+
+        // Create OCR flags for corrupted headings
+        for (let i = 0; i < chapterResult.chapters.length; i++) {
+          const ch = chapterResult.chapters[i];
+          if (ch.isOcrCorrupted) {
+            await ctx.runMutation(internal.cleanupFlags.createOcrChapterFlag, {
+              bookId: args.bookId,
+              revisionId,
+              chapterId: chapterIds[i],
+              rawHeading: ch.detectedHeading || "Unknown",
+              lineNumber: 0,
+            });
+          }
+        }
+
+        // Create flags for ambiguous content
+        await ctx.runMutation(internal.cleanup.updateJobStage, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          stage: "completed",
+          progress: 90,
+        });
+
+        const flagIds = await ctx.runMutation(
+          internal.cleanupFlags.batchCreateFlagsFromResults,
+          {
+            bookId: args.bookId,
+            revisionId,
+            unlabeledBreaks: cleanupResult.unlabeledBreaks,
+            ambiguousPositions: cleanupResult.ambiguousPositions,
+            lowConfidencePunctuation: cleanupResult.lowConfidencePunctuation,
+            startMarkerFound: cleanupResult.startMarkerFound,
+            endMarkerFound: cleanupResult.endMarkerFound,
+          },
+        );
+
+        // Update job to completed
+        await ctx.runMutation(internal.cleanup.completeJob, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          revisionId,
+          chaptersDetected: chapterResult.chapters.length,
+          flagsCreated:
+            flagIds.length +
+            chapterResult.chapters.filter((c) => c.isOcrCorrupted).length,
+        });
+
+        // Update book status
+        await ctx.runMutation(internal.cleanup.updateBookStatus, {
+          bookId: args.bookId,
+          status: "cleaned",
+        });
+
+        return {
+          success: true,
+          revisionId,
+          chaptersDetected: chapterResult.chapters.length,
+          flagsCreated: flagIds.length,
+        };
+      } catch (error) {
+        // Update job to failed
+        await ctx.runMutation(internal.cleanup.failJob, {
+          jobId: args.jobId,
+          mainJobId: args.mainJobId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
       }
-
-      // Create flags for ambiguous content
-      await ctx.runMutation(internal.cleanup.updateJobStage, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        stage: "completed",
-        progress: 90,
-      });
-
-      const flagIds = await ctx.runMutation(internal.cleanupFlags.batchCreateFlagsFromResults, {
-        bookId: args.bookId,
-        revisionId,
-        unlabeledBreaks: cleanupResult.unlabeledBreaks,
-        ambiguousPositions: cleanupResult.ambiguousPositions,
-        lowConfidencePunctuation: cleanupResult.lowConfidencePunctuation,
-        startMarkerFound: cleanupResult.startMarkerFound,
-        endMarkerFound: cleanupResult.endMarkerFound,
-      });
-
-      // Update job to completed
-      await ctx.runMutation(internal.cleanup.completeJob, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        revisionId,
-        chaptersDetected: chapterResult.chapters.length,
-        flagsCreated: flagIds.length + chapterResult.chapters.filter(c => c.isOcrCorrupted).length,
-      });
-
-      // Update book status
-      await ctx.runMutation(internal.cleanup.updateBookStatus, {
-        bookId: args.bookId,
-        status: "cleaned",
-      });
-
-      return {
-        success: true,
-        revisionId,
-        chaptersDetected: chapterResult.chapters.length,
-        flagsCreated: flagIds.length,
-      };
-
-    } catch (error) {
-      // Update job to failed
-      await ctx.runMutation(internal.cleanup.failJob, {
-        jobId: args.jobId,
-        mainJobId: args.mainJobId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  },
-});
+    },
+  });
 
 /**
  * Get review data for a book
@@ -284,8 +308,9 @@ export const getReviewData = query({
     }
 
     // Get latest revision
-    const revisions = await ctx.db.query("cleanupRevisions")
-      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+    const revisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id_revision", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -293,22 +318,29 @@ export const getReviewData = query({
 
     // Get chapters for latest revision
     const chapters = latestRevision
-      ? await ctx.db.query("cleanupChapters")
-          .withIndex("by_revision_id", q => q.eq("revisionId", latestRevision._id))
+      ? await ctx.db
+          .query("cleanupChapters")
+          .withIndex("by_revision_id", (q) =>
+            q.eq("revisionId", latestRevision._id),
+          )
           .order("asc")
           .collect()
       : [];
 
     // Get unresolved flags
     const flags = latestRevision
-      ? await ctx.db.query("cleanupFlags")
-          .withIndex("by_book_status", q => q.eq("bookId", args.bookId).eq("status", "unresolved"))
+      ? await ctx.db
+          .query("cleanupFlags")
+          .withIndex("by_book_status", (q) =>
+            q.eq("bookId", args.bookId).eq("status", "unresolved"),
+          )
           .collect()
       : [];
 
     // Get original content
-    const originals = await ctx.db.query("cleanupOriginals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const originals = await ctx.db
+      .query("cleanupOriginals")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
 
     return {
@@ -328,20 +360,23 @@ export const getReviewData = query({
 export const listReviewFlags = query({
   args: {
     bookId: v.id("books"),
-    status: v.optional(v.union(
-      v.literal("unresolved"),
-      v.literal("confirmed"),
-      v.literal("rejected"),
-      v.literal("overridden"),
-    )),
+    status: v.optional(
+      v.union(
+        v.literal("unresolved"),
+        v.literal("confirmed"),
+        v.literal("rejected"),
+        v.literal("overridden"),
+      ),
+    ),
   },
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    let query_ = ctx.db.query("cleanupFlags")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId));
+    let query_ = ctx.db
+      .query("cleanupFlags")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId));
 
     if (args.status) {
-      query_ = query_.filter(q => q.eq(q.field("status"), args.status));
+      query_ = query_.filter((q) => q.eq(q.field("status"), args.status));
     }
 
     return await query_.order("desc").collect();
@@ -354,7 +389,11 @@ export const listReviewFlags = query({
 export const resolveFlag: ReturnType<typeof mutation> = mutation({
   args: {
     flagId: v.id("cleanupFlags"),
-    status: v.union(v.literal("confirmed"), v.literal("rejected"), v.literal("overridden")),
+    status: v.union(
+      v.literal("confirmed"),
+      v.literal("rejected"),
+      v.literal("overridden"),
+    ),
     reviewerNote: v.optional(v.string()),
   },
   returns: v.any(),
@@ -366,8 +405,9 @@ export const resolveFlag: ReturnType<typeof mutation> = mutation({
     }
 
     // Look up the user by email - users table from auth doesn't have custom indexes
-    const userRecord = await ctx.db.query("users")
-      .withIndex("email", q => q.eq("email", user.email))
+    const userRecord = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", user.email))
       .first();
 
     if (!userRecord) {
@@ -407,128 +447,157 @@ export const promoteBoundaryToChapter: ReturnType<typeof mutation> = mutation({
     }
 
     // Get current max chapter number for this revision
-    const chapters = await ctx.db.query("cleanupChapters")
-      .withIndex("by_revision_id", q => q.eq("revisionId", flag.revisionId))
+    const chapters = await ctx.db
+      .query("cleanupChapters")
+      .withIndex("by_revision_id", (q) => q.eq("revisionId", flag.revisionId))
       .collect();
 
-    const maxChapter = chapters.reduce((max, ch) => Math.max(max, ch.chapterNumber), 0);
+    const maxChapter = chapters.reduce(
+      (max, ch) => Math.max(max, ch.chapterNumber),
+      0,
+    );
 
     // Schedule action since mutations can't call actions directly
-    await ctx.scheduler.runAfter(0, internal.cleanupFlags.promoteBoundaryToChapter, {
-      bookId: flag.bookId,
-      revisionId: flag.revisionId,
-      flagId: args.flagId,
-      title: args.title,
-      type: args.type,
-      chapterNumber: maxChapter + 1,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.cleanupFlags.promoteBoundaryToChapter,
+      {
+        bookId: flag.bookId,
+        revisionId: flag.revisionId,
+        flagId: args.flagId,
+        title: args.title,
+        type: args.type,
+        chapterNumber: maxChapter + 1,
+      },
+    );
 
     // Return placeholder - actual chapter will be created async
     return { chapterId: "xxx" as unknown as Id<"cleanupChapters"> };
   },
 });
 
-
 /**
  * Internal action to save a revision with file storage
  * This runs as an action to avoid 1MB mutation size limit
  */
-export const saveRevisionWithFiles: ReturnType<typeof internalAction> = internalAction({
-  args: {
-    bookId: v.id("books"),
-    content: v.string(),
-    revisionNumber: v.number(),
-    isDeterministic: v.boolean(),
-    isAiAssisted: v.boolean(),
-    preserveArchaic: v.boolean(),
-    parentRevisionId: v.optional(v.id("cleanupRevisions")),
-    userId: v.id("users"),
-    approvalKept: v.boolean(),
-    latestApprovalId: v.optional(v.id("cleanupApprovals")),
-  },
-  returns: v.object({
-    revisionId: v.id("cleanupRevisions"),
-    chapterIds: v.array(v.id("cleanupChapters")),
-  }),
-  handler: async (ctx, args): Promise<{ revisionId: Id<"cleanupRevisions">; chapterIds: Id<"cleanupChapters">[] }> => {
-    // Store cleaned content as a file (not in database - 1MB limit)
-    const contentBlob = new Blob([args.content], { type: "text/plain" });
-    const contentFileId = await ctx.storage.store(contentBlob);
+export const saveRevisionWithFiles: ReturnType<typeof internalAction> =
+  internalAction({
+    args: {
+      bookId: v.id("books"),
+      content: v.string(),
+      revisionNumber: v.number(),
+      isDeterministic: v.boolean(),
+      isAiAssisted: v.boolean(),
+      preserveArchaic: v.boolean(),
+      parentRevisionId: v.optional(v.id("cleanupRevisions")),
+      userId: v.id("users"),
+      approvalKept: v.boolean(),
+      latestApprovalId: v.optional(v.id("cleanupApprovals")),
+    },
+    returns: v.object({
+      revisionId: v.id("cleanupRevisions"),
+      chapterIds: v.array(v.id("cleanupChapters")),
+    }),
+    handler: async (
+      ctx,
+      args,
+    ): Promise<{
+      revisionId: Id<"cleanupRevisions">;
+      chapterIds: Id<"cleanupChapters">[];
+    }> => {
+      // Store cleaned content as a file (not in database - 1MB limit)
+      const contentBlob = new Blob([args.content], { type: "text/plain" });
+      const contentFileId = await ctx.storage.store(contentBlob);
 
-    // Detect chapters for the new content
-    const chapterResult = detectChapterBoundaries(args.content);
+      // Detect chapters for the new content
+      const chapterResult = detectChapterBoundaries(args.content);
 
-    // Store each chapter as a file and collect metadata
-    const chapterFiles: Array<{
-      chapterNumber: number;
-      title: string;
-      type: "chapter" | "preface" | "introduction" | "notes" | "appendix" | "body";
-      fileId: Id<"_storage">;
-      startOffset: number;
-      endOffset: number;
-      detectedHeading?: string;
-      isUserConfirmed: boolean;
-      confidence: "high" | "medium" | "low";
-      isOcrCorrupted: boolean;
-      sizeBytes: number;
-    }> = [];
-    for (const ch of chapterResult.chapters) {
-      const chapterBlob = new Blob([ch.content], { type: "text/plain" });
-      const chapterFileId = await ctx.storage.store(chapterBlob);
-      
-      chapterFiles.push({
-        chapterNumber: ch.chapterNumber,
-        title: ch.title,
-        type: ch.type,
-        fileId: chapterFileId,
-        startOffset: ch.startOffset,
-        endOffset: ch.endOffset,
-        detectedHeading: ch.detectedHeading ?? undefined,
-        isUserConfirmed: ch.isUserConfirmed,
-        confidence: ch.confidence,
-        isOcrCorrupted: ch.isOcrCorrupted,
-        sizeBytes: chapterBlob.size,
-      });
-    }
+      // Store each chapter as a file and collect metadata
+      const chapterFiles: Array<{
+        chapterNumber: number;
+        title: string;
+        type:
+          | "chapter"
+          | "preface"
+          | "introduction"
+          | "notes"
+          | "appendix"
+          | "body";
+        fileId: Id<"_storage">;
+        startOffset: number;
+        endOffset: number;
+        detectedHeading?: string;
+        isUserConfirmed: boolean;
+        confidence: "high" | "medium" | "low";
+        isOcrCorrupted: boolean;
+        sizeBytes: number;
+      }> = [];
+      for (const ch of chapterResult.chapters) {
+        const chapterBlob = new Blob([ch.content], { type: "text/plain" });
+        const chapterFileId = await ctx.storage.store(chapterBlob);
 
-    // Create revision record with file reference
-    const revisionId: Id<"cleanupRevisions"> = await ctx.runMutation(internal.cleanup.createRevisionRecord, {
-      bookId: args.bookId,
-      revisionNumber: args.revisionNumber,
-      fileId: contentFileId,
-      sizeBytes: contentBlob.size,
-      isDeterministic: args.isDeterministic,
-      isAiAssisted: args.isAiAssisted,
-      preserveArchaic: args.preserveArchaic,
-      createdBy: "user",
-      parentRevisionId: args.parentRevisionId,
-    });
-
-    // Create chapter records with file references
-    const chapterIds: Id<"cleanupChapters">[] = await ctx.runMutation(internal.cleanupPipeline.createChapterRecords, {
-      bookId: args.bookId,
-      revisionId,
-      chapters: chapterFiles,
-    });
-
-    // If keeping approval, create approval record
-    if (args.approvalKept && args.latestApprovalId) {
-      const approval = await ctx.runQuery(internal.cleanup.getApprovalChecklist, {
-        approvalId: args.latestApprovalId,
-      });
-      if (approval.checklistConfirmed) {
-        await ctx.runMutation(internal.cleanup.createApprovalForRevision, {
-          bookId: args.bookId,
-          revisionId,
-          userId: args.userId,
-          checklistConfirmed: approval.checklistConfirmed,
+        chapterFiles.push({
+          chapterNumber: ch.chapterNumber,
+          title: ch.title,
+          type: ch.type,
+          fileId: chapterFileId,
+          startOffset: ch.startOffset,
+          endOffset: ch.endOffset,
+          detectedHeading: ch.detectedHeading ?? undefined,
+          isUserConfirmed: ch.isUserConfirmed,
+          confidence: ch.confidence,
+          isOcrCorrupted: ch.isOcrCorrupted,
+          sizeBytes: chapterBlob.size,
         });
       }
-    }
 
-    return { revisionId, chapterIds };
-  },
-});
+      // Create revision record with file reference
+      const revisionId: Id<"cleanupRevisions"> = await ctx.runMutation(
+        internal.cleanup.createRevisionRecord,
+        {
+          bookId: args.bookId,
+          revisionNumber: args.revisionNumber,
+          fileId: contentFileId,
+          sizeBytes: contentBlob.size,
+          isDeterministic: args.isDeterministic,
+          isAiAssisted: args.isAiAssisted,
+          preserveArchaic: args.preserveArchaic,
+          createdBy: "user",
+          parentRevisionId: args.parentRevisionId,
+        },
+      );
+
+      // Create chapter records with file references
+      const chapterIds: Id<"cleanupChapters">[] = await ctx.runMutation(
+        internal.cleanupPipeline.createChapterRecords,
+        {
+          bookId: args.bookId,
+          revisionId,
+          chapters: chapterFiles,
+        },
+      );
+
+      // If keeping approval, create approval record
+      if (args.approvalKept && args.latestApprovalId) {
+        const approval = await ctx.runQuery(
+          internal.cleanup.getApprovalChecklist,
+          {
+            approvalId: args.latestApprovalId,
+          },
+        );
+        if (approval.checklistConfirmed) {
+          await ctx.runMutation(internal.cleanup.createApprovalForRevision, {
+            bookId: args.bookId,
+            revisionId,
+            userId: args.userId,
+            checklistConfirmed: approval.checklistConfirmed,
+          });
+        }
+      }
+
+      return { revisionId, chapterIds };
+    },
+  });
 
 /**
  * Internal mutation to create a revision record with file reference
@@ -570,12 +639,14 @@ export const getApprovalChecklist = internalQuery({
     approvalId: v.id("cleanupApprovals"),
   },
   returns: v.object({
-    checklistConfirmed: v.optional(v.object({
-      boilerplateRemoved: v.boolean(),
-      chapterBoundariesVerified: v.boolean(),
-      punctuationReviewed: v.boolean(),
-      archaicPreserved: v.boolean(),
-    })),
+    checklistConfirmed: v.optional(
+      v.object({
+        boilerplateRemoved: v.boolean(),
+        chapterBoundariesVerified: v.boolean(),
+        punctuationReviewed: v.boolean(),
+        archaicPreserved: v.boolean(),
+      }),
+    ),
   }),
   handler: async (ctx, args) => {
     const approval = await ctx.db.get(args.approvalId);
@@ -647,8 +718,9 @@ export const saveCleanedRevision = mutation({
       throw new Error("Must be authenticated to save revisions");
     }
 
-    const userRecord = await ctx.db.query("users")
-      .withIndex("email", q => q.eq("email", user.email))
+    const userRecord = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", user.email))
       .first();
 
     if (!userRecord) {
@@ -662,13 +734,16 @@ export const saveCleanedRevision = mutation({
     }
 
     // Get the latest revision to determine new revision number
-    const latestRevisions = await ctx.db.query("cleanupRevisions")
-      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+    const latestRevisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id_revision", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
     const latestRevision = latestRevisions[0];
-    const newRevisionNumber = latestRevision ? latestRevision.revisionNumber + 1 : 1;
+    const newRevisionNumber = latestRevision
+      ? latestRevision.revisionNumber + 1
+      : 1;
 
     // Inherit properties from parent revision if available
     const isDeterministic = latestRevision?.isDeterministic ?? false;
@@ -678,7 +753,7 @@ export const saveCleanedRevision = mutation({
     // Check if there's an active approval
     const approvals = await ctx.db
       .query("cleanupApprovals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -720,7 +795,7 @@ export const saveCleanedRevision = mutation({
     const placeholderRevisionId = await ctx.db.insert("cleanupRevisions", {
       bookId: args.bookId,
       revisionNumber: newRevisionNumber,
-      fileId: "xxx" as unknown as Id<"_storage">,  // Will be updated by action
+      fileId: "xxx" as unknown as Id<"_storage">, // Will be updated by action
       sizeBytes: 0,
       isDeterministic,
       isAiAssisted,
@@ -748,8 +823,9 @@ export const getCleanupStatus = query({
   },
   returns: v.union(v.null(), v.any()),
   handler: async (ctx, args) => {
-    const jobs = await ctx.db.query("cleanupJobs")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const jobs = await ctx.db
+      .query("cleanupJobs")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -764,22 +840,33 @@ export const getCleanupStatusesForBooks = query({
   args: {
     bookIds: v.array(v.id("books")),
   },
-  returns: v.array(v.union(v.null(), v.object({
-    bookId: v.string(),
-    status: v.union(v.literal("queued"), v.literal("running"), v.literal("completed"), v.literal("failed")),
-    stage: v.optional(v.string()),
-    progress: v.optional(v.number()),
-    error: v.optional(v.string()),
-  }))),
+  returns: v.array(
+    v.union(
+      v.null(),
+      v.object({
+        bookId: v.string(),
+        status: v.union(
+          v.literal("queued"),
+          v.literal("running"),
+          v.literal("completed"),
+          v.literal("failed"),
+        ),
+        stage: v.optional(v.string()),
+        progress: v.optional(v.number()),
+        error: v.optional(v.string()),
+      }),
+    ),
+  ),
   handler: async (ctx, args) => {
     const results = [];
-    
+
     for (const bookId of args.bookIds) {
-      const job = await ctx.db.query("cleanupJobs")
-        .withIndex("by_book_id", q => q.eq("bookId", bookId))
+      const job = await ctx.db
+        .query("cleanupJobs")
+        .withIndex("by_book_id", (q) => q.eq("bookId", bookId))
         .order("desc")
         .first();
-      
+
       if (job) {
         results.push({
           bookId,
@@ -792,7 +879,7 @@ export const getCleanupStatusesForBooks = query({
         results.push(null);
       }
     }
-    
+
     return results;
   },
 });
@@ -813,8 +900,9 @@ export const insertOriginal = internalMutation({
   returns: v.id("cleanupOriginals"),
   handler: async (ctx, args) => {
     // Check if original already exists
-    const existing = await ctx.db.query("cleanupOriginals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const existing = await ctx.db
+      .query("cleanupOriginals")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .first();
 
     if (existing) {
@@ -838,20 +926,13 @@ export const updateJobStage = internalMutation({
   args: {
     jobId: v.id("cleanupJobs"),
     mainJobId: v.optional(v.id("jobs")),
-    stage: v.union(
-      v.literal("queued"),
-      v.literal("loading_original"),
-      v.literal("boilerplate_removal"),
-      v.literal("paragraph_unwrap"),
-      v.literal("chapter_detection"),
-      v.literal("punctuation_normalization"),
-      v.literal("completed"),
-      v.literal("failed"),
-    ),
+    stage: deterministicCleanupStageValidator,
     progress: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const mainJobStage = mapDeterministicCleanupStageToMainJobStage(args.stage);
+
     const update: Record<string, unknown> = {
       stage: args.stage,
       progress: args.progress,
@@ -872,7 +953,7 @@ export const updateJobStage = internalMutation({
       const mainJob = await ctx.db.get(args.mainJobId);
       if (mainJob) {
         const mainUpdate: Record<string, unknown> = {
-          stage: args.stage,
+          stage: mainJobStage,
           progress: args.progress,
         };
         if (args.stage === "loading_original" && !mainJob.startedAt) {
@@ -997,7 +1078,7 @@ export const canApprove = query({
     // Get latest revision
     const revisions = await ctx.db
       .query("cleanupRevisions")
-      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+      .withIndex("by_book_id_revision", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -1015,7 +1096,9 @@ export const canApprove = query({
     // Get unresolved flags for this book
     const flags = await ctx.db
       .query("cleanupFlags")
-      .withIndex("by_book_status", q => q.eq("bookId", args.bookId).eq("status", "unresolved"))
+      .withIndex("by_book_status", (q) =>
+        q.eq("bookId", args.bookId).eq("status", "unresolved"),
+      )
       .collect();
 
     // Can only approve if no unresolved flags exist
@@ -1033,7 +1116,7 @@ export const canApprove = query({
 /**
  * Approve a cleaned revision
  * BLOCKED if unresolved low-confidence flags exist (per CONTEXT.md)
- * 
+ *
  * Approval checklist confirmation must be completed before calling this.
  */
 export const approveRevision = mutation({
@@ -1055,10 +1138,11 @@ export const approveRevision = mutation({
   handler: async (ctx, args) => {
     // Verify all checklist items confirmed
     const checklist = args.checklistConfirmed;
-    const allConfirmed = checklist.boilerplateRemoved &&
-                        checklist.chapterBoundariesVerified &&
-                        checklist.punctuationReviewed &&
-                        checklist.archaicPreserved;
+    const allConfirmed =
+      checklist.boilerplateRemoved &&
+      checklist.chapterBoundariesVerified &&
+      checklist.punctuationReviewed &&
+      checklist.archaicPreserved;
 
     if (!allConfirmed) {
       return {
@@ -1070,7 +1154,9 @@ export const approveRevision = mutation({
     // CRITICAL: Check for unresolved flags - this is the approval gate
     const unresolvedFlags = await ctx.db
       .query("cleanupFlags")
-      .withIndex("by_book_status", q => q.eq("bookId", args.bookId).eq("status", "unresolved"))
+      .withIndex("by_book_status", (q) =>
+        q.eq("bookId", args.bookId).eq("status", "unresolved"),
+      )
       .collect();
 
     if (unresolvedFlags.length > 0) {
@@ -1106,8 +1192,9 @@ export const approveRevision = mutation({
       };
     }
 
-    const userRecord = await ctx.db.query("users")
-      .withIndex("email", q => q.eq("email", user.email))
+    const userRecord = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", user.email))
       .first();
 
     if (!userRecord) {
@@ -1159,7 +1246,7 @@ export const getApprovalState = query({
     // Get latest revision
     const revisions = await ctx.db
       .query("cleanupRevisions")
-      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+      .withIndex("by_book_id_revision", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -1168,7 +1255,7 @@ export const getApprovalState = query({
     // Get latest approval
     const approvals = await ctx.db
       .query("cleanupApprovals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -1225,7 +1312,7 @@ export const revokeApproval = mutation({
     // Find the latest approval
     const approvals = await ctx.db
       .query("cleanupApprovals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .order("desc")
       .take(1);
 
@@ -1247,7 +1334,6 @@ export const revokeApproval = mutation({
   },
 });
 
-
 // ─── DEV UTILITIES ─────────────────────────────────────────────────────────
 
 /**
@@ -1266,40 +1352,45 @@ export const clearCleanupData = internalMutation({
   }),
   handler: async (ctx, args) => {
     // Delete originals
-    const originals = await ctx.db.query("cleanupOriginals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const originals = await ctx.db
+      .query("cleanupOriginals")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const orig of originals) {
       await ctx.db.delete(orig._id);
     }
 
     // Delete revisions (this will orphan chapters, but we'll clean them too)
-    const revisions = await ctx.db.query("cleanupRevisions")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const revisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const rev of revisions) {
       await ctx.db.delete(rev._id);
     }
 
     // Delete chapters
-    const chapters = await ctx.db.query("cleanupChapters")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const chapters = await ctx.db
+      .query("cleanupChapters")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const ch of chapters) {
       await ctx.db.delete(ch._id);
     }
 
     // Delete flags
-    const flags = await ctx.db.query("cleanupFlags")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const flags = await ctx.db
+      .query("cleanupFlags")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const flag of flags) {
       await ctx.db.delete(flag._id);
     }
 
     // Delete jobs
-    const jobs = await ctx.db.query("cleanupJobs")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const jobs = await ctx.db
+      .query("cleanupJobs")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const job of jobs) {
       await ctx.db.delete(job._id);
