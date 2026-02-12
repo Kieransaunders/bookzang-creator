@@ -14,7 +14,7 @@ This roadmap turns BookZang from a scaffolded dashboard into a production pipeli
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Book Intake and Pipeline Visibility** - Local text intake and job observability are working end to end.
-- [ ] **Phase 2: Text Cleanup and Editorial Approval** - Gutenberg cleanup and human approval flow produce trusted final text.
+- [x] **Phase 2: Text Cleanup and Editorial Approval** - Gutenberg cleanup and human approval flow produce trusted final text.
 - [ ] **Phase 3: Typography Templates and KDP Interior Export** - Approved text renders into validated KDP-ready interior PDFs.
 - [ ] **Phase 4: Cover Packaging and Batch Automation** - Folder lifecycle, Canva cover workflow, and local batch runs support production throughput.
 
@@ -60,14 +60,23 @@ Plans:
 4. User can review original vs cleaned content in a side-by-side diff and make manual edits.
 5. User can explicitly approve cleaned text to unlock template and export steps.
 
-**Plans**: 4 plans
+**Plans**: 4 plans (all complete)
 
 Plans:
 
-- [ ] 02-01-PLAN.md — Build deterministic cleanup foundation with chapter segmentation, normalization, and reviewer flags
-- [ ] 02-02-PLAN.md — Add Kimi-backed AI cleanup adapter with validated patch application and low-confidence flagging
-- [ ] 02-03-PLAN.md — Implement side-by-side editorial review UI with read-only original pane and editable cleaned pane
-- [ ] 02-04-PLAN.md — Enforce checklist approval gate, unresolved-flag blocking, and downstream unlock behavior
+- [x] 02-01-PLAN.md — Build deterministic cleanup foundation with chapter segmentation, normalization, and reviewer flags
+- [x] 02-02-PLAN.md — Add Kimi-backed AI cleanup adapter with validated patch application and low-confidence flagging
+- [x] 02-03-PLAN.md — Implement side-by-side editorial review UI with read-only original pane and editable cleaned pane
+- [x] 02-04-PLAN.md — Enforce checklist approval gate, unresolved-flag blocking, and downstream unlock behavior
+
+**Completed**: 2026-02-12
+
+**Notable Enhancements Delivered**:
+- Immutable original text with versioned cleaned revisions
+- AI-assisted cleanup with Kimi K2 provider boundary
+- Side-by-side CodeMirror merge editor
+- Checklist-gated approval with unresolved-flag hard blocking
+- Per-title downstream unlock for template/export actions
 
 ### Phase 3: Typography Templates and KDP Interior Export
 
