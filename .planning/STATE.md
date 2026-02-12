@@ -10,29 +10,29 @@ See: `.planning/PROJECT.md` (updated 2026-02-12)
 ## Current Position
 
 Phase: 1 of 4 (Book Intake and Pipeline Visibility)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-12 - Roadmap created from v1 requirements and traceability mapping initialized.
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-12 - Completed plan 01-01 backend intake pipeline foundation.
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
 
 - Total plans completed: 0
-- Average duration: 0 min
-- Total execution time: 0.0 hours
+- Average duration: 7 min
+- Total execution time: 0.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 | ----- | ----- | ----- | -------- |
-| -     | -     | -     | -        |
+| 1     | 1     | 7 min | 7 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: none yet
+- Last 5 plans: 01-01 (7 min)
 - Trend: Stable
 
 _Updated after each plan completion_
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - [Phase 1-4]: Roadmap sequence set to intake -> cleanup/review -> interior export -> batch packaging.
 - [Phase 2]: Cleanup requires deterministic preprocessing plus AI-assisted correction with user approval gate.
 - [Phase 3]: KDP compliance checks (trim, gutter, embedded fonts) treated as mandatory release gate.
+- [Phase 01-book-intake-and-pipeline-visibility]: Use discoveryCandidates table so discovery rows remain visible before and after enqueue.
+- [Phase 01-book-intake-and-pipeline-visibility]: Treat Gutenberg-ID dedupe as default block and return existingBookId for inline linking.
+- [Phase 01-book-intake-and-pipeline-visibility]: Fail extraction when no file exists and persist job/book failure details for operator review.
 
 ### Pending Todos
 
@@ -61,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-12 08:37
-Stopped at: Initial roadmap and project state created
+Last session: 2026-02-12 10:27
+Stopped at: Completed 01-book-intake-and-pipeline-visibility-01-PLAN.md
 Resume file: None
