@@ -13,31 +13,10 @@
 
 import OpenAI from "openai";
 import { z } from "zod";
+import { CleanupPatchSchema, CleanupResponseSchema, type CleanupPatch, type CleanupResponse } from "./cleanupPrompts";
 
-/**
- * Cleanup patch schema - represents a single AI-suggested edit
- */
-export const CleanupPatchSchema = z.object({
-  start: z.number().describe("Character offset where edit starts"),
-  end: z.number().describe("Character offset where edit ends"),
-  original: z.string().describe("Original text being replaced"),
-  replacement: z.string().describe("Proposed replacement text"),
-  confidence: z.enum(["high", "low"]).describe("Confidence level for this edit"),
-  reason: z.string().describe("Explanation for why this change is suggested"),
-});
-
-export type CleanupPatch = z.infer<typeof CleanupPatchSchema>;
-
-/**
- * AI cleanup response schema
- */
-export const CleanupResponseSchema = z.object({
-  patches: z.array(CleanupPatchSchema).describe("Array of edit patches to apply"),
-  summary: z.string().describe("Brief summary of changes made"),
-  preservationNotes: z.array(z.string()).describe("Notes about archaic elements preserved"),
-});
-
-export type CleanupResponse = z.infer<typeof CleanupResponseSchema>;
+// Re-export types for backward compatibility
+export type { CleanupPatch, CleanupResponse };
 
 /**
  * Configuration for the AI cleanup client
@@ -203,13 +182,19 @@ function createMockCleanupAiClient(): CleanupAiClient {
   return {
     isConfigured: () => false,
 
-    async requestCleanupPatches(text): Promise<CleanupResponse> {
+    async requestCleanupPatches(): Promise<CleanupResponse> {
       // Return empty patches - no AI changes in mock mode
       console.log("Mock AI client: returning no patches (API key not configured)");
       return {
         patches: [],
         summary: "Mock mode: no AI cleanup performed (KIMI_API_KEY not set)",
         preservationNotes: ["All text preserved in mock mode"],
+        stats: {
+          highConfidencePatches: 0,
+          lowConfidencePatches: 0,
+          ocrErrorsFixed: 0,
+          punctuationNormalizations: 0,
+        },
       };
     },
   };
