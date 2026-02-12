@@ -202,6 +202,23 @@ const applicationTables = {
     .index("by_book_id", ["bookId"])
     .index("by_status", ["status"])
     .index("by_stage", ["stage"]),
+
+  // Approval records for cleaned revisions
+  cleanupApprovals: defineTable({
+    bookId: v.id("books"),
+    revisionId: v.id("cleanupRevisions"),
+    approvedBy: v.id("users"),
+    approvedAt: v.number(),
+    checklistConfirmed: v.object({
+      boilerplateRemoved: v.boolean(),
+      chapterBoundariesVerified: v.boolean(),
+      punctuationReviewed: v.boolean(),
+      archaicPreserved: v.boolean(),
+    }),
+  })
+    .index("by_book_id", ["bookId"])
+    .index("by_revision_id", ["revisionId"])
+    .index("by_book_revision", ["bookId", "revisionId"]),
 };
 
 export default defineSchema({

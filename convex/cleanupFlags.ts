@@ -5,7 +5,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 
 /**
  * Flag types for different cleanup ambiguities
@@ -112,14 +112,14 @@ export const getFlagsByBook = internalQuery({
   },
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    let query = ctx.db.query("cleanupFlags")
+    let queryBuilder = ctx.db.query("cleanupFlags")
       .withIndex("by_book_id", q => q.eq("bookId", args.bookId));
 
     if (args.status) {
-      query = query.filter(q => q.eq(q.field("status"), args.status));
+      queryBuilder = queryBuilder.filter(q => q.eq(q.field("status"), args.status));
     }
 
-    return await query.collect();
+    return await queryBuilder.collect();
   },
 });
 
@@ -138,14 +138,14 @@ export const getFlagsByRevision = internalQuery({
   },
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
-    let query = ctx.db.query("cleanupFlags")
+    let queryBuilder = ctx.db.query("cleanupFlags")
       .withIndex("by_revision_id", q => q.eq("revisionId", args.revisionId));
 
     if (args.status) {
-      query = query.filter(q => q.eq(q.field("status"), args.status));
+      queryBuilder = queryBuilder.filter(q => q.eq(q.field("status"), args.status));
     }
 
-    return await query.collect();
+    return await queryBuilder.collect();
   },
 });
 
@@ -362,5 +362,80 @@ export const promoteBoundaryToChapter = internalMutation({
     });
 
     return { chapterId };
+  },
+});
+
+// =============================================================================
+// Public Queries for Approval Gating (CLEAN-03)
+// =============================================================================
+
+/**
+ * List review flags for a book with optional status filter
+ * 
+ * Usage per plan verification:
+ *   npx convex run cleanupFlags:listReviewFlags '{"bookId":"...","status":"unresolved"}'
+ */
+export const listReviewFlags = query({
+  args: {
+    bookId: v.id("books"),
+    status: v.optional(v.union(
+      v.literal("unresolved"),
+      v.literal("confirmed"),
+      v.literal("rejected"),
+      v.literal("overridden"),
+    )),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    let queryBuilder = ctx.db.query("cleanupFlags")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId));
+
+    if (args.status) {
+      queryBuilder = queryBuilder.filter(q => q.eq(q.field("status"), args.status));
+    }
+
+    return await queryBuilder.order("desc").collect();
+  },
+});
+
+/**
+ * Get count of unresolved flags for approval gating
+ */
+export const getUnresolvedFlagCount = query({
+  args: {
+    bookId: v.id("books"),
+  },
+  returns: v.object({
+    total: v.number(),
+    byType: v.object({
+      unlabeled_boundary_candidate: v.number(),
+      low_confidence_cleanup: v.number(),
+      ocr_corruption_detected: v.number(),
+      ambiguous_punctuation: v.number(),
+      chapter_boundary_disputed: v.number(),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    const flags = await ctx.db
+      .query("cleanupFlags")
+      .withIndex("by_book_status", q => q.eq("bookId", args.bookId).eq("status", "unresolved"))
+      .collect();
+
+    const byType = {
+      unlabeled_boundary_candidate: 0,
+      low_confidence_cleanup: 0,
+      ocr_corruption_detected: 0,
+      ambiguous_punctuation: 0,
+      chapter_boundary_disputed: 0,
+    };
+
+    for (const flag of flags) {
+      byType[flag.type as keyof typeof byType]++;
+    }
+
+    return {
+      total: flags.length,
+      byType,
+    };
   },
 });

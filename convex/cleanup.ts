@@ -602,3 +602,211 @@ export const updateBookStatus = internalMutation({
     return null;
   },
 });
+
+// =============================================================================
+// Approval Gating - CLEAN-03 requirement: approval blocked by unresolved flags
+// =============================================================================
+
+/**
+ * Check if a book can be approved (no unresolved flags)
+ * This enforces the approval gate requirement from CONTEXT.md
+ */
+export const canApprove = query({
+  args: {
+    bookId: v.id("books"),
+  },
+  returns: v.object({
+    canApprove: v.boolean(),
+    unresolvedFlagCount: v.number(),
+    blockingFlags: v.array(v.any()),
+    latestRevision: v.any(),
+  }),
+  handler: async (ctx, args) => {
+    // Get latest revision
+    const revisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+      .order("desc")
+      .take(1);
+
+    const latestRevision = revisions[0];
+
+    if (!latestRevision) {
+      return {
+        canApprove: false,
+        unresolvedFlagCount: 0,
+        blockingFlags: [],
+        latestRevision: null,
+      };
+    }
+
+    // Get unresolved flags for this book
+    const flags = await ctx.db
+      .query("cleanupFlags")
+      .withIndex("by_book_status", q => q.eq("bookId", args.bookId).eq("status", "unresolved"))
+      .collect();
+
+    // Can only approve if no unresolved flags exist
+    const canApprove = flags.length === 0;
+
+    return {
+      canApprove,
+      unresolvedFlagCount: flags.length,
+      blockingFlags: flags,
+      latestRevision,
+    };
+  },
+});
+
+/**
+ * Approve a cleaned revision
+ * BLOCKED if unresolved low-confidence flags exist (per CONTEXT.md)
+ * 
+ * Approval checklist confirmation must be completed before calling this.
+ */
+export const approveRevision = mutation({
+  args: {
+    bookId: v.id("books"),
+    revisionId: v.id("cleanupRevisions"),
+    checklistConfirmed: v.object({
+      boilerplateRemoved: v.boolean(),
+      chapterBoundariesVerified: v.boolean(),
+      punctuationReviewed: v.boolean(),
+      archaicPreserved: v.boolean(),
+    }),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    approvedRevisionId: v.optional(v.id("cleanupRevisions")),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    // Verify all checklist items confirmed
+    const checklist = args.checklistConfirmed;
+    const allConfirmed = checklist.boilerplateRemoved &&
+                        checklist.chapterBoundariesVerified &&
+                        checklist.punctuationReviewed &&
+                        checklist.archaicPreserved;
+
+    if (!allConfirmed) {
+      return {
+        success: false,
+        error: "All checklist items must be confirmed before approval",
+      };
+    }
+
+    // CRITICAL: Check for unresolved flags - this is the approval gate
+    const unresolvedFlags = await ctx.db
+      .query("cleanupFlags")
+      .withIndex("by_book_status", q => q.eq("bookId", args.bookId).eq("status", "unresolved"))
+      .collect();
+
+    if (unresolvedFlags.length > 0) {
+      return {
+        success: false,
+        error: `Cannot approve: ${unresolvedFlags.length} unresolved flag(s) require review. Resolve all low-confidence cleanup flags before approving.`,
+      };
+    }
+
+    // Get the revision
+    const revision = await ctx.db.get(args.revisionId);
+    if (!revision) {
+      return {
+        success: false,
+        error: "Revision not found",
+      };
+    }
+
+    // Verify revision belongs to this book
+    if (revision.bookId !== args.bookId) {
+      return {
+        success: false,
+        error: "Revision does not belong to this book",
+      };
+    }
+
+    // Get current user
+    const user = await ctx.auth.getUserIdentity();
+    if (!user) {
+      return {
+        success: false,
+        error: "Must be authenticated to approve",
+      };
+    }
+
+    const userRecord = await ctx.db.query("users")
+      .withIndex("email", q => q.eq("email", user.email))
+      .first();
+
+    if (!userRecord) {
+      return {
+        success: false,
+        error: "User not found",
+      };
+    }
+
+    // Create approval record
+    await ctx.db.insert("cleanupApprovals", {
+      bookId: args.bookId,
+      revisionId: args.revisionId,
+      approvedBy: userRecord._id,
+      approvedAt: Date.now(),
+      checklistConfirmed: args.checklistConfirmed,
+    });
+
+    // Update book status to ready
+    await ctx.db.patch(args.bookId, { status: "ready" });
+
+    return {
+      success: true,
+      approvedRevisionId: args.revisionId,
+    };
+  },
+});
+
+/**
+ * Revoke approval (when edits are made after approval)
+ */
+export const revokeApproval = mutation({
+  args: {
+    bookId: v.id("books"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    // Get current user
+    const user = await ctx.auth.getUserIdentity();
+    if (!user) {
+      return {
+        success: false,
+        error: "Must be authenticated to revoke approval",
+      };
+    }
+
+    // Find the latest approval
+    const approvals = await ctx.db
+      .query("cleanupApprovals")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .order("desc")
+      .take(1);
+
+    const latestApproval = approvals[0];
+
+    if (!latestApproval) {
+      return {
+        success: false,
+        error: "No active approval found for this book",
+      };
+    }
+
+    // Revoke by updating book status back to cleaned
+    await ctx.db.patch(args.bookId, { status: "cleaned" });
+
+    return {
+      success: true,
+    };
+  },
+});
