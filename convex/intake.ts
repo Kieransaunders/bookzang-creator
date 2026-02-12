@@ -153,6 +153,7 @@ export const createDiscoveryCandidates = mutation({
 
     const createdCandidateIds = [];
     const existingCandidateIds = [];
+    const updatedCandidateIds = [];
 
     for (const candidate of incoming) {
       const existing = await ctx.db
@@ -164,6 +165,24 @@ export const createDiscoveryCandidates = mutation({
 
       if (existing) {
         existingCandidateIds.push(existing._id);
+        await ctx.db.patch(existing._id, {
+          title: candidate.title,
+          author: candidate.author,
+          warning: candidate.warning,
+          error:
+            existing.status === "discovered" ||
+            existing.status === "duplicate_blocked" ||
+            existing.status === "failed"
+              ? undefined
+              : existing.error,
+          status:
+            existing.status === "discovered" ||
+            existing.status === "duplicate_blocked" ||
+            existing.status === "failed"
+              ? "discovered"
+              : existing.status,
+        });
+        updatedCandidateIds.push(existing._id);
         continue;
       }
 
@@ -183,8 +202,10 @@ export const createDiscoveryCandidates = mutation({
       status: "ok" as const,
       created: createdCandidateIds.length,
       existing: existingCandidateIds.length,
+      updated: updatedCandidateIds.length,
       createdCandidateIds,
       existingCandidateIds,
+      updatedCandidateIds,
     };
   },
 });
