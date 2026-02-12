@@ -156,16 +156,27 @@ export const createDiscoveryCandidates = mutation({
     const updatedCandidateIds = [];
 
     for (const candidate of incoming) {
-      const existing = await ctx.db
+      const existingByGutenbergId = await ctx.db
+        .query("discoveryCandidates")
+        .withIndex("by_gutenberg_id", (q: any) =>
+          q.eq("gutenbergId", candidate.gutenbergId),
+        )
+        .first();
+
+      const existingBySourcePath = await ctx.db
         .query("discoveryCandidates")
         .withIndex("by_source_path", (q: any) =>
           q.eq("sourcePath", candidate.sourcePath),
         )
         .first();
 
+      const existing = existingByGutenbergId ?? existingBySourcePath;
+
       if (existing) {
         existingCandidateIds.push(existing._id);
         await ctx.db.patch(existing._id, {
+          gutenbergId: candidate.gutenbergId,
+          sourcePath: candidate.sourcePath,
           title: candidate.title,
           author: candidate.author,
           warning: candidate.warning,

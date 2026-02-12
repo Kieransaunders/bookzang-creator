@@ -33,6 +33,44 @@ export function ImportModal({ onClose }: ImportModalProps) {
     return null;
   };
 
+  const inferFolderNumberFromFileName = (fileName: string): string | null => {
+    const pgMatch = fileName.match(/^pg(\d+).*\.(txt|md|epub)$/i);
+    if (pgMatch) {
+      return pgMatch[1];
+    }
+
+    const numericBaseName = fileName
+      .replace(/\.[^/.]+$/, "")
+      .trim()
+      .match(/^(\d+)$/);
+    if (numericBaseName) {
+      return numericBaseName[1];
+    }
+
+    return null;
+  };
+
+  const inferMetadataFromPreview = (text: string) => {
+    const titleMatch = text.match(/^Title:\s*(.+)$/im);
+    const authorMatch = text.match(/^Author:\s*(.+)$/im);
+
+    if (titleMatch?.[1] || authorMatch?.[1]) {
+      return {
+        title: titleMatch?.[1]?.trim(),
+        author: authorMatch?.[1]?.trim(),
+      };
+    }
+
+    const fallback = text.match(
+      /Project Gutenberg eBook of\s+([^,\n]+),\s+by\s+([^\n]+)/i,
+    );
+
+    return {
+      title: fallback?.[1]?.trim(),
+      author: fallback?.[2]?.trim(),
+    };
+  };
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -102,7 +140,7 @@ export function ImportModal({ onClose }: ImportModalProps) {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // Validate file type
@@ -132,10 +170,34 @@ export function ImportModal({ onClose }: ImportModalProps) {
       setSelectedFile(file);
       setDuplicateBlock(null);
 
+      if (!folderNumberInput.trim()) {
+        const inferredFolderNumber = inferFolderNumberFromFileName(file.name);
+        if (inferredFolderNumber) {
+          setFolderNumberInput(inferredFolderNumber);
+        }
+      }
+
       // Auto-populate title from filename if empty
       if (!bookTitle) {
         const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
         setBookTitle(nameWithoutExt);
+      }
+
+      if (!bookAuthor.trim() || !bookTitle.trim()) {
+        try {
+          const preview = await file.slice(0, 120_000).text();
+          const inferred = inferMetadataFromPreview(preview);
+
+          if (!bookTitle.trim() && inferred.title) {
+            setBookTitle(inferred.title);
+          }
+
+          if (!bookAuthor.trim() && inferred.author) {
+            setBookAuthor(inferred.author);
+          }
+        } catch {
+          // Ignore preview parsing errors and keep manual entry path.
+        }
       }
     }
   };
@@ -222,7 +284,7 @@ export function ImportModal({ onClose }: ImportModalProps) {
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Folder number (optional)
+              Gutenberg ebook code (folder number, optional)
             </label>
             <input
               type="text"
@@ -238,6 +300,7 @@ export function ImportModal({ onClose }: ImportModalProps) {
             />
             <p className="mt-2 text-xs text-slate-400">
               Uses your local `library/epub/&lt;number&gt;` folder number.
+              Auto-fills from filenames like `pg11.txt`.
             </p>
           </div>
 

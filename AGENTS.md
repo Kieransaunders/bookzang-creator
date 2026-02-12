@@ -29,6 +29,20 @@ BookZang is a book transformation dashboard that converts public domain books (p
 | **Storage** | Convex File Storage |
 | **Build Tool** | Vite with React plugin |
 
+## Skill References
+
+This project includes specialized knowledge packs in `.claude/skills/`. **Always read the relevant SKILL.md before implementing code** for these areas:
+
+| Technology | Skill Path | When to Use |
+|------------|------------|-------------|
+| **Convex** | `.claude/skills/convex/SKILL.md` | Backend queries, mutations, actions, schema design, `useQuery`, `useMutation`, `ctx.db` patterns |
+| **shadcn/ui** | `.claude/skills/shadcn-ui/SKILL.md` | UI components from `@/components/ui/`, Radix primitives, component composition |
+| **Tailwind v4** | `.claude/skills/tailwind-v4/SKILL.md` | Styling, theme tokens, responsive design, custom classes |
+| **TanStack** | `.claude/skills/tanstack/SKILL.md` | Routing, loaders, `createFileRoute`, server functions |
+| **UI/UX Design** | `.claude/skills/ui-ux-pro-max/SKILL.md` | Design decisions, color palettes, layouts, glassmorphism, typography |
+
+> **Standing Order:** If a skill exists for a technology you're working with, consult it first. These skills contain battle-tested patterns, troubleshooting guides, and integration notes specific to this fleet's operations.
+
 ## Project Structure
 
 ```

@@ -10,6 +10,10 @@
 
 import type * as auth from "../auth.js";
 import type * as books from "../books.js";
+import type * as cleanup from "../cleanup.js";
+import type * as cleanupChaptering from "../cleanupChaptering.js";
+import type * as cleanupFlags from "../cleanupFlags.js";
+import type * as cleanupPipeline from "../cleanupPipeline.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as intake from "../intake.js";
@@ -27,6 +31,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   books: typeof books;
+  cleanup: typeof cleanup;
+  cleanupChaptering: typeof cleanupChaptering;
+  cleanupFlags: typeof cleanupFlags;
+  cleanupPipeline: typeof cleanupPipeline;
   files: typeof files;
   http: typeof http;
   intake: typeof intake;

@@ -10,11 +10,11 @@ See: `.planning/PROJECT.md` (updated 2026-02-12)
 ## Current Position
 
 Phase: 2 of 4 (Text Cleanup and Editorial Approval)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-02-12 - Phase 1 execution verified and signed off after human checks.
+Plan: 4 of 4 planned, ready for execution
+Status: Planned (awaiting execution start)
+Last activity: 2026-02-12 - Phase 2 planning complete with 4 plans.
 
-Progress: [███░░░░░░░] 25%
+Progress: [████████░░] 80% (Phase 1 complete, Phase 2 planned, Phase 3 planned)
 
 ## Performance Metrics
 
@@ -59,6 +59,8 @@ Recent decisions affecting current work:
 - [Phase 01-book-intake-and-pipeline-visibility]: Discovery candidates remain visible before and after enqueue with in-place status transitions for operator tracking.
 - [Phase 01-book-intake-and-pipeline-visibility]: Local discovery sync runs in chunked ConvexHttpClient batches with optional DISCOVER_LIMIT for large corpora.
 - [Phase 3]: Phase 3 planning completed with 4 plans: template system, PDF generation pipeline, KDP validation, and export UX.
+- [Phase 2]: Phase 2 planning completed with 4 plans: deterministic cleanup foundation, AI cleanup adapter, review UI, and approval gating.
+- [Phase 1 Enhancement]: Import modal enhanced with multi-format support (.txt/.md/.epub) and smart metadata inference during execution.
 
 ### Pending Todos
 

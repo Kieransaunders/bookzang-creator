@@ -32,13 +32,20 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. Imported/discovered books show extracted title and author metadata from Gutenberg text.
 4. Pipeline jobs show Queued, Running, Completed, or Failed states with per-job progress and error logs in the dashboard.
 
-**Plans**: 3 plans
+**Plans**: 3 plans (all complete)
 
 Plans:
 
 - [x] 01-01-PLAN.md — Build unified Convex intake pipeline, schema, dedupe, and metadata extraction action
 - [x] 01-02-PLAN.md — Implement manual upload and discovery candidate UX plus local discovery scanner script
 - [x] 01-03-PLAN.md — Deliver grouped jobs observability with stage/progress and expandable failure details
+
+**Completed**: 2026-02-12
+
+**Notable Enhancements Delivered**:
+- Multi-format import support (`.txt`, `.md`, `.epub`)
+- Smart metadata inference from file content preview + filename patterns
+- Duplicate blocking with explicit override workflow
 
 ### Phase 2: Text Cleanup and Editorial Approval
 
