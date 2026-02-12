@@ -57,6 +57,7 @@ Recent decisions affecting current work:
 - [Phase 01-book-intake-and-pipeline-visibility]: Manual upload now enforces duplicate-block with explicit override before re-enqueue for intentional duplicates.
 - [Phase 01-book-intake-and-pipeline-visibility]: Discovery candidates remain visible before and after enqueue with in-place status transitions for operator tracking.
 - [Phase 01-book-intake-and-pipeline-visibility]: Local discovery sync runs in chunked ConvexHttpClient batches with optional DISCOVER_LIMIT for large corpora.
+- [Phase 3]: Phase 3 planning completed with 4 plans: template system, PDF generation pipeline, KDP validation, and export UX.
 
 ### Pending Todos
 

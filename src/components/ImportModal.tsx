@@ -10,7 +10,7 @@ interface ImportModalProps {
 }
 
 export function ImportModal({ onClose }: ImportModalProps) {
-  const [gutenbergInput, setGutenbergInput] = useState("");
+  const [folderNumberInput, setFolderNumberInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [bookTitle, setBookTitle] = useState("");
@@ -25,16 +25,9 @@ export function ImportModal({ onClose }: ImportModalProps) {
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
   const createBookFromFile = useMutation(api.books.createFromFile);
 
-  const extractGutenbergId = (input: string): string | null => {
-    // Handle direct ID
+  const extractFolderNumber = (input: string): string | null => {
     if (/^\d+$/.test(input.trim())) {
       return input.trim();
-    }
-
-    // Handle Gutenberg URL
-    const urlMatch = input.match(/gutenberg\.org\/ebooks\/(\d+)/);
-    if (urlMatch) {
-      return urlMatch[1];
     }
 
     return null;
@@ -48,11 +41,11 @@ export function ImportModal({ onClose }: ImportModalProps) {
       return;
     }
 
-    const parsedGutenbergId = gutenbergInput.trim()
-      ? extractGutenbergId(gutenbergInput)
+    const parsedGutenbergId = folderNumberInput.trim()
+      ? extractFolderNumber(folderNumberInput)
       : null;
-    if (gutenbergInput.trim() && !parsedGutenbergId) {
-      toast.error("Gutenberg field must be a numeric ID or ebooks URL");
+    if (folderNumberInput.trim() && !parsedGutenbergId) {
+      toast.error("Folder number must be numeric (e.g., 11)");
       return;
     }
 
@@ -229,18 +222,23 @@ export function ImportModal({ onClose }: ImportModalProps) {
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Gutenberg ID or URL (optional)
+              Folder number (optional)
             </label>
             <input
               type="text"
-              value={gutenbergInput}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={folderNumberInput}
               onChange={(e) => {
-                setGutenbergInput(e.target.value);
+                setFolderNumberInput(e.target.value.replace(/\D/g, ""));
                 setDuplicateBlock(null);
               }}
-              placeholder="e.g., 1342 or https://www.gutenberg.org/ebooks/1342"
+              placeholder="e.g., 11"
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             />
+            <p className="mt-2 text-xs text-slate-400">
+              Uses your local `library/epub/&lt;number&gt;` folder number.
+            </p>
           </div>
 
           {duplicateBlock && (

@@ -32,11 +32,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. Imported/discovered books show extracted title and author metadata from Gutenberg text.
 4. Pipeline jobs show Queued, Running, Completed, or Failed states with per-job progress and error logs in the dashboard.
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 
-- [ ] 01-01: TBD during phase planning
+- [ ] 01-01-PLAN.md — Build unified Convex intake pipeline, schema, dedupe, and metadata extraction action
+- [ ] 01-02-PLAN.md — Implement manual upload and discovery candidate UX plus local discovery scanner script
+- [ ] 01-03-PLAN.md — Deliver grouped jobs observability with stage/progress and expandable failure details
 
 ### Phase 2: Text Cleanup and Editorial Approval
 
@@ -51,11 +53,14 @@ Plans:
 4. User can review original vs cleaned content in a side-by-side diff and make manual edits.
 5. User can explicitly approve cleaned text to unlock template and export steps.
 
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] 02-01: TBD during phase planning
+- [ ] 02-01-PLAN.md — Build deterministic cleanup foundation with chapter segmentation, normalization, and reviewer flags
+- [ ] 02-02-PLAN.md — Add Kimi-backed AI cleanup adapter with validated patch application and low-confidence flagging
+- [ ] 02-03-PLAN.md — Implement side-by-side editorial review UI with read-only original pane and editable cleaned pane
+- [ ] 02-04-PLAN.md — Enforce checklist approval gate, unresolved-flag blocking, and downstream unlock behavior
 
 ### Phase 3: Typography Templates and KDP Interior Export
 
@@ -69,11 +74,14 @@ Plans:
 3. Generated interior PDFs embed required fonts and pass KDP-critical checks for trim and margins.
 4. User can download stored interior export artifacts for reuse and KDP upload.
 
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] 03-01: TBD during phase planning
+- [ ] 03-01-PLAN.md — Template system and data model with presets
+- [ ] 03-02-PLAN.md — PDF generation pipeline with Playwright + Paged.js
+- [ ] 03-03-PLAN.md — KDP compliance validation and pre-flight checks
+- [ ] 03-04-PLAN.md — Interior export UX and artifact management
 
 ### Phase 4: Cover Packaging and Batch Automation
 
@@ -100,7 +108,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase                                           | Plans Complete | Status      | Completed |
 | ----------------------------------------------- | -------------- | ----------- | --------- |
-| 1. Book Intake and Pipeline Visibility          | 0/TBD          | Not started | -         |
-| 2. Text Cleanup and Editorial Approval          | 0/TBD          | Not started | -         |
-| 3. Typography Templates and KDP Interior Export | 0/TBD          | Not started | -         |
+| 1. Book Intake and Pipeline Visibility          | 0/3            | Not started | -         |
+| 2. Text Cleanup and Editorial Approval          | 0/4            | Planned     | -         |
+| 3. Typography Templates and KDP Interior Export | 4/4            | Planned     | -         |
 | 4. Cover Packaging and Batch Automation         | 0/TBD          | Not started | -         |
