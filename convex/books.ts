@@ -7,15 +7,16 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     let books = await ctx.db.query("books").order("desc").collect();
-    
+
     if (args.search) {
       const searchLower = args.search.toLowerCase();
-      books = books.filter(book => 
-        book.title.toLowerCase().includes(searchLower) ||
-        book.author.toLowerCase().includes(searchLower)
+      books = books.filter(
+        (book) =>
+          book.title.toLowerCase().includes(searchLower) ||
+          book.author.toLowerCase().includes(searchLower),
       );
     }
-    
+
     return books;
   },
 });
@@ -36,6 +37,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     return await ctx.db.insert("books", {
       ...args,
+      source: "discovery",
       status: "imported",
       importedAt: Date.now(),
     });
@@ -54,6 +56,7 @@ export const createFromFile = mutation({
       title: args.title,
       author: args.author,
       gutenbergId: `file-${Date.now()}`, // Generate a unique ID for uploaded files
+      source: "upload",
       status: "imported",
       importedAt: Date.now(),
       fileId: args.fileId,

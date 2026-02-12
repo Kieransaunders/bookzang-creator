@@ -25,8 +25,10 @@ export const create = mutation({
     return await ctx.db.insert("jobs", {
       ...args,
       status: "queued",
+      stage: "queued",
       progress: 0,
       logs: "",
+      queuedAt: Date.now(),
     });
   },
 });
@@ -34,7 +36,22 @@ export const create = mutation({
 export const updateStatus = mutation({
   args: {
     jobId: v.id("jobs"),
-    status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("error")),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    stage: v.optional(
+      v.union(
+        v.literal("queued"),
+        v.literal("loading_file"),
+        v.literal("parsing_metadata"),
+        v.literal("persisting_metadata"),
+        v.literal("completed"),
+        v.literal("failed"),
+      ),
+    ),
     progress: v.optional(v.number()),
     logs: v.optional(v.string()),
     error: v.optional(v.string()),
