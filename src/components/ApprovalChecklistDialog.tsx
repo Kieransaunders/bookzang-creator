@@ -1,16 +1,31 @@
 /**
  * ApprovalChecklistDialog - Checklist confirmation dialog for cleanup approval
- * 
+ *
  * Per CONTEXT.md requirements:
  * - Approval requires checklist confirmation (not single-click)
  * - Approval blocked when unresolved low-confidence flags remain
- * 
+ *
  * This dialog enforces explicit confirmation of quality criteria before
  * the approval mutation can be submitted.
  */
 
-import { useState } from "react";
-import { CheckCircle, AlertCircle, X, FileCheck, BookOpen, Type, History } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  CheckCircle,
+  AlertCircle,
+  X,
+  FileCheck,
+  BookOpen,
+  Type,
+  History,
+} from "lucide-react";
+
+type ApprovalChecklist = {
+  boilerplateRemoved: boolean;
+  chapterBoundariesVerified: boolean;
+  punctuationReviewed: boolean;
+  archaicPreserved: boolean;
+};
 
 interface ApprovalChecklistDialogProps {
   /** Whether the dialog is open */
@@ -18,12 +33,7 @@ interface ApprovalChecklistDialogProps {
   /** Called when dialog is closed without approving */
   onClose: () => void;
   /** Called when all checklist items confirmed and approve clicked */
-  onApprove: (checklist: {
-    boilerplateRemoved: boolean;
-    chapterBoundariesVerified: boolean;
-    punctuationReviewed: boolean;
-    archaicPreserved: boolean;
-  }) => void;
+  onApprove: (checklist: ApprovalChecklist) => void;
   /** Number of unresolved flags blocking approval */
   unresolvedFlagCount: number;
   /** Whether approval is in progress */
@@ -34,7 +44,7 @@ interface ApprovalChecklistDialogProps {
  * Checklist item definition
  */
 interface ChecklistItem {
-  id: keyof ApprovalChecklistDialogProps["onApprove"] extends (c: infer C) => void ? C : never;
+  id: keyof ApprovalChecklist;
   label: string;
   description: string;
   icon: React.ReactNode;
@@ -44,7 +54,8 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "boilerplateRemoved",
     label: "Boilerplate Removed",
-    description: "Project Gutenberg license header and trailer have been stripped",
+    description:
+      "Project Gutenberg license header and trailer have been stripped",
     icon: <FileCheck size={18} />,
   },
   {
@@ -56,13 +67,15 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "punctuationReviewed",
     label: "Punctuation Reviewed",
-    description: "Punctuation normalization looks correct (archaic forms preserved)",
+    description:
+      "Punctuation normalization looks correct (archaic forms preserved)",
     icon: <Type size={18} />,
   },
   {
     id: "archaicPreserved",
     label: "Archaic Language Preserved",
-    description: "Old spelling and grammar conventions intentionally kept intact",
+    description:
+      "Old spelling and grammar conventions intentionally kept intact",
     icon: <History size={18} />,
   },
 ];
@@ -77,7 +90,7 @@ export function ApprovalChecklistDialog({
   unresolvedFlagCount,
   isApproving,
 }: ApprovalChecklistDialogProps) {
-  const [confirmedItems, setConfirmedItems] = useState<Record<string, boolean>>({
+  const [confirmedItems, setConfirmedItems] = useState<ApprovalChecklist>({
     boilerplateRemoved: false,
     chapterBoundariesVerified: false,
     punctuationReviewed: false,
@@ -85,7 +98,7 @@ export function ApprovalChecklistDialog({
   });
 
   // Reset state when dialog opens
-  useState(() => {
+  useEffect(() => {
     if (isOpen) {
       setConfirmedItems({
         boilerplateRemoved: false,
@@ -94,7 +107,7 @@ export function ApprovalChecklistDialog({
         archaicPreserved: false,
       });
     }
-  });
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -102,7 +115,7 @@ export function ApprovalChecklistDialog({
   const allConfirmed = Object.values(confirmedItems).every(Boolean);
   const canApprove = allConfirmed && !isBlockedByFlags && !isApproving;
 
-  const handleToggle = (id: string) => {
+  const handleToggle = (id: keyof ApprovalChecklist) => {
     setConfirmedItems((prev) => ({
       ...prev,
       [id]: !prev[id],
@@ -120,7 +133,7 @@ export function ApprovalChecklistDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -128,7 +141,7 @@ export function ApprovalChecklistDialog({
       />
 
       {/* Dialog */}
-      <div className="relative w-full max-w-lg liquid-glass-strong rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative my-4 flex w-full max-w-lg flex-col overflow-hidden rounded-2xl liquid-glass-strong shadow-2xl max-h-[calc(100dvh-2rem)]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -153,15 +166,16 @@ export function ApprovalChecklistDialog({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="overflow-y-auto p-6 space-y-6">
           {/* Blocking warning */}
           {isBlockedByFlags && (
             <div className="flex gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-              <AlertCircle size={20} className="text-yellow-400 shrink-0 mt-0.5" />
+              <AlertCircle
+                size={20}
+                className="text-yellow-400 shrink-0 mt-0.5"
+              />
               <div>
-                <p className="font-medium text-yellow-300">
-                  Approval Blocked
-                </p>
+                <p className="font-medium text-yellow-300">Approval Blocked</p>
                 <p className="text-sm text-yellow-200/70 mt-1">
                   Resolve {unresolvedFlagCount} unresolved flag
                   {unresolvedFlagCount !== 1 ? "s" : ""} in the Flags panel
@@ -177,7 +191,8 @@ export function ApprovalChecklistDialog({
             <p className="text-sm font-medium text-slate-300">
               Quality Checklist
               <span className="text-slate-500 font-normal">
-                {" "}(all required)
+                {" "}
+                (all required)
               </span>
             </p>
 

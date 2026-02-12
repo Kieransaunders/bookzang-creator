@@ -1,11 +1,11 @@
 /**
  * CleanupReviewPage - Editorial review shell for cleaned text
- * 
+ *
  * Loads review data (original, cleaned, chapters, flags), provides
  * side-by-side diff editing, and allows saving cleaned revisions.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -34,7 +34,7 @@ interface CleanupReviewPageProps {
 
 /**
  * Main review page for editorial cleanup workflow
- * 
+ *
  * Layout:
  * - Header with book info, save button, exit
  * - Main area: Side-by-side merge editor
@@ -49,6 +49,8 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
 
   // Local state for editing
   const [editedText, setEditedText] = useState<string>("");
+  const [originalText, setOriginalText] = useState<string>("");
+  const [cleanedText, setCleanedText] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -61,7 +63,52 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
 
   // Post-approval edit prompt state
   const [showPostApprovalPrompt, setShowPostApprovalPrompt] = useState(false);
-  const [pendingSaveContent, setPendingSaveContent] = useState<string | null>(null);
+  const [pendingSaveContent, setPendingSaveContent] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!reviewData?.original && !reviewData?.revision) return;
+
+    let cancelled = false;
+
+    const loadContent = async () => {
+      const loadText = async (
+        source:
+          | { content?: string; contentUrl?: string | null }
+          | null
+          | undefined,
+      ): Promise<string> => {
+        if (!source) return "";
+        if (typeof source.content === "string") return source.content;
+        if (!source.contentUrl) return "";
+
+        try {
+          const response = await fetch(source.contentUrl);
+          if (!response.ok) return "";
+          return await response.text();
+        } catch {
+          return "";
+        }
+      };
+
+      const [nextOriginal, nextCleaned] = await Promise.all([
+        loadText(reviewData.original),
+        loadText(reviewData.revision),
+      ]);
+
+      if (!cancelled) {
+        setOriginalText(nextOriginal);
+        setCleanedText(nextCleaned);
+      }
+    };
+
+    loadContent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewData?.original, reviewData?.revision]);
 
   // Initialize edited text when review data loads
   const handleCleanedChange = useCallback((text: string) => {
@@ -72,17 +119,23 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
   // Check if save would trigger post-approval edit flow
   const checkPostApprovalSave = useCallback(() => {
     // If book is approved and we're editing the approved revision
-    if (approvalState?.isApproved && approvalState?.approvalValid && editedText !== reviewData?.revision?.content) {
+    if (
+      approvalState?.isApproved &&
+      approvalState?.approvalValid &&
+      editedText !== cleanedText
+    ) {
       setPendingSaveContent(editedText);
       setShowPostApprovalPrompt(true);
       return true;
     }
     return false;
-  }, [approvalState, editedText, reviewData?.revision?.content]);
+  }, [approvalState, editedText, cleanedText]);
 
   // Handle save with optional keepApproval parameter
   const performSave = async (keepApproval?: boolean) => {
     if (!reviewData?.revision) return;
+
+    const contentToSave = editedText === "" ? cleanedText : editedText;
 
     setIsSaving(true);
     setSaveError(null);
@@ -90,18 +143,22 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
     try {
       const result = await saveRevision({
         bookId,
-        content: editedText,
+        content: contentToSave,
         parentRevisionId: reviewData.revision._id,
         keepApproval,
       });
       setLastSaved(new Date());
-      
+
       // Show feedback if approval was affected
       if (result.approvalRevoked) {
-        setSaveError("Approval revoked: A new revision was created. Re-approval required for export.");
+        setSaveError(
+          "Approval revoked: A new revision was created. Re-approval required for export.",
+        );
       }
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save revision");
+      setSaveError(
+        err instanceof Error ? err.message : "Failed to save revision",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -174,7 +231,8 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
             Cleanup Data Not Available
           </h2>
           <p className="text-slate-400 mb-6">
-            This book hasn&apos;t been processed through cleanup yet. Please run cleanup first.
+            This book hasn&apos;t been processed through cleanup yet. Please run
+            cleanup first.
           </p>
           <button
             onClick={onExit}
@@ -187,8 +245,9 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
     );
   }
 
-  const { book, original, revision, chapters, unresolvedFlags, canApprove } = reviewData;
-  const hasChanges = editedText !== "" && editedText !== revision.content;
+  const { book, original, revision, chapters, unresolvedFlags, canApprove } =
+    reviewData;
+  const hasChanges = editedText !== "" && editedText !== cleanedText;
   const unresolvedCount = unresolvedFlags.length;
 
   return (
@@ -205,9 +264,7 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
               <ArrowLeft size={20} className="text-slate-300" />
             </button>
             <div>
-              <h1 className="text-lg font-semibold text-white">
-                {book.title}
-              </h1>
+              <h1 className="text-lg font-semibold text-white">{book.title}</h1>
               <p className="text-sm text-slate-400">{book.author}</p>
             </div>
           </div>
@@ -326,8 +383,8 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
           {/* Merge editor */}
           <div className="flex-1 overflow-hidden">
             <CleanupMergeEditor
-              originalText={original.content}
-              cleanedText={revision.content}
+              originalText={originalText}
+              cleanedText={cleanedText}
               onCleanedChange={handleCleanedChange}
               className="h-full"
             />
@@ -398,7 +455,8 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
                           <p className="text-xs text-slate-400 mt-1">
                             {chapter.type === "chapter"
                               ? `Chapter ${chapter.chapterNumber}`
-                              : chapter.type.charAt(0).toUpperCase() + chapter.type.slice(1)}
+                              : chapter.type.charAt(0).toUpperCase() +
+                                chapter.type.slice(1)}
                           </p>
                         </div>
                         {!chapter.isUserConfirmed && (
@@ -497,9 +555,7 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
                 <div className="flex items-center gap-3">
                   <CheckCircle size={20} className="text-green-400" />
                   <div>
-                    <p className="font-medium text-green-300">
-                      Keep Approval
-                    </p>
+                    <p className="font-medium text-green-300">Keep Approval</p>
                     <p className="text-sm text-green-200/70">
                       New revision is approved; export remains unlocked
                     </p>

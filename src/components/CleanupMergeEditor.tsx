@@ -1,6 +1,6 @@
 /**
  * CleanupMergeEditor - Side-by-side merge editor for editorial review
- * 
+ *
  * Uses CodeMirror MergeView to display original (read-only) and cleaned (editable)
  * text with line/paragraph-level diff highlighting.
  */
@@ -19,6 +19,12 @@ interface CleanupMergeEditorProps {
   cleanedText: string;
   /** Callback when cleaned text changes */
   onCleanedChange: (text: string) => void;
+  /** Optional focus range in cleaned text for flag navigation */
+  focusRange?: {
+    key: string;
+    startOffset: number;
+    endOffset: number;
+  } | null;
   /** Optional className for styling */
   className?: string;
 }
@@ -26,20 +32,20 @@ interface CleanupMergeEditorProps {
 /**
  * Debounce utility for performance on large documents
  */
-function debounce<T extends (...args: unknown[]) => void>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => void {
+function debounce(
+  fn: (text: string) => void,
+  delay: number,
+): (text: string) => void {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  return (...args: Parameters<T>) => {
+  return (text: string) => {
     if (timeoutId) clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
+    timeoutId = setTimeout(() => fn(text), delay);
   };
 }
 
 /**
  * CodeMirror Merge Editor for side-by-side review
- * 
+ *
  * Features:
  * - Left pane: Original text (read-only)
  * - Right pane: Cleaned text (editable)
@@ -50,18 +56,20 @@ export function CleanupMergeEditor({
   originalText,
   cleanedText,
   onCleanedChange,
+  focusRange,
   className = "",
 }: CleanupMergeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mergeViewRef = useRef<MergeView | null>(null);
   const cleanedViewRef = useRef<EditorView | null>(null);
+  const lastFocusKeyRef = useRef<string | null>(null);
 
   // Debounced change handler for performance
   const debouncedOnChange = useCallback(
     debounce((text: string) => {
       onCleanedChange(text);
     }, 300),
-    [onCleanedChange]
+    [onCleanedChange],
   );
 
   // Initialize the merge view
@@ -83,13 +91,15 @@ export function CleanupMergeEditor({
       },
       ".cm-content": {
         caretColor: "#60a5fa",
-        fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+        fontFamily:
+          "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
         fontSize: "14px",
         lineHeight: "1.6",
       },
-      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground": {
-        backgroundColor: "rgba(96, 165, 250, 0.3)",
-      },
+      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
+        {
+          backgroundColor: "rgba(96, 165, 250, 0.3)",
+        },
       ".cm-gutters": {
         backgroundColor: "rgba(30, 41, 59, 0.8)",
         borderRight: "1px solid rgba(255, 255, 255, 0.1)",
@@ -106,6 +116,18 @@ export function CleanupMergeEditor({
     // Create the merge view
     const mergeView = new MergeView({
       a: {
+        doc: originalText,
+        extensions: [
+          bookZangDarkTheme,
+          oneDark,
+          keymap.of(defaultKeymap),
+          EditorView.lineWrapping,
+          // Make original pane read-only
+          EditorView.editable.of(false),
+          EditorState.readOnly.of(true),
+        ],
+      },
+      b: {
         doc: cleanedText,
         extensions: [
           bookZangDarkTheme,
@@ -120,18 +142,6 @@ export function CleanupMergeEditor({
           }),
         ],
       },
-      b: {
-        doc: originalText,
-        extensions: [
-          bookZangDarkTheme,
-          oneDark,
-          keymap.of(defaultKeymap),
-          EditorView.lineWrapping,
-          // Make original pane read-only
-          EditorView.editable.of(false),
-          EditorState.readOnly.of(true),
-        ],
-      },
       parent: containerRef.current,
       // Configure diff behavior
       highlightChanges: true,
@@ -144,7 +154,7 @@ export function CleanupMergeEditor({
     });
 
     mergeViewRef.current = mergeView;
-    cleanedViewRef.current = mergeView.a;
+    cleanedViewRef.current = mergeView.b;
 
     return () => {
       mergeView.destroy();
@@ -158,8 +168,8 @@ export function CleanupMergeEditor({
     const mergeView = mergeViewRef.current;
     if (!mergeView) return;
 
-    const cleanedView = mergeView.a;
-    const originalView = mergeView.b;
+    const cleanedView = mergeView.b;
+    const originalView = mergeView.a;
 
     // Update cleaned text if different from current editor content
     const currentCleanedText = cleanedView.state.doc.toString();
@@ -185,6 +195,27 @@ export function CleanupMergeEditor({
       });
     }
   }, [originalText, cleanedText]);
+
+  useEffect(() => {
+    if (!focusRange) return;
+    if (lastFocusKeyRef.current === focusRange.key) return;
+
+    const cleanedView = cleanedViewRef.current;
+    if (!cleanedView) return;
+
+    const docLength = cleanedView.state.doc.length;
+    const start = Math.max(0, Math.min(focusRange.startOffset, docLength));
+    const end = Math.max(start, Math.min(focusRange.endOffset, docLength));
+
+    cleanedView.dispatch({
+      selection: { anchor: start, head: end },
+      effects: EditorView.scrollIntoView(start, {
+        y: "center",
+      }),
+    });
+    cleanedView.focus();
+    lastFocusKeyRef.current = focusRange.key;
+  }, [focusRange]);
 
   return (
     <div

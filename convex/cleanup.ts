@@ -307,14 +307,34 @@ export const getReviewData = query({
       throw new Error(`Book ${args.bookId} not found`);
     }
 
-    // Get latest revision
+    // Get latest revisions (multiple to avoid selecting placeholder rows)
     const revisions = await ctx.db
       .query("cleanupRevisions")
       .withIndex("by_book_id_revision", (q) => q.eq("bookId", args.bookId))
       .order("desc")
-      .take(1);
+      .take(10);
 
-    const latestRevision = revisions[0];
+    let latestRevision = null;
+    for (const revision of revisions) {
+      const hasLegacyContent = revision.content !== undefined;
+      const hasUsableStoredFile =
+        revision.fileId !== undefined && (revision.sizeBytes ?? 0) > 0;
+
+      if (hasLegacyContent || hasUsableStoredFile) {
+        const contentUrl = revision.fileId
+          ? await ctx.storage.getUrl(revision.fileId)
+          : null;
+        latestRevision = {
+          ...revision,
+          contentUrl,
+        };
+        break;
+      }
+    }
+
+    if (!latestRevision && revisions[0]) {
+      latestRevision = { ...revisions[0], content: "" };
+    }
 
     // Get chapters for latest revision
     const chapters = latestRevision
@@ -337,15 +357,44 @@ export const getReviewData = query({
           .collect()
       : [];
 
-    // Get original content
+    // Get original content (prefer newest record with usable content)
     const originals = await ctx.db
       .query("cleanupOriginals")
       .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
 
+    const originalCandidates = [...originals].sort(
+      (a, b) => (b.capturedAt ?? 0) - (a.capturedAt ?? 0),
+    );
+
+    let original = null;
+    for (const candidate of originalCandidates) {
+      const hasLegacyContent = candidate.content !== undefined;
+      const hasStoredFile = candidate.fileId !== undefined;
+      if (hasLegacyContent || hasStoredFile) {
+        const contentUrl = candidate.fileId
+          ? await ctx.storage.getUrl(candidate.fileId)
+          : null;
+        original = { ...candidate, contentUrl };
+        break;
+      }
+    }
+
+    // Fallback for legacy cleanupOriginals rows that have no content/fileId
+    if (!original && book.fileId) {
+      const contentUrl = await ctx.storage.getUrl(book.fileId);
+      if (contentUrl) {
+        original = {
+          ...originalCandidates[0],
+          fileId: book.fileId,
+          contentUrl,
+        };
+      }
+    }
+
     return {
       book,
-      original: originals[0] || null,
+      original,
       revision: latestRevision || null,
       chapters,
       unresolvedFlags: flags,
@@ -790,23 +839,20 @@ export const saveCleanedRevision = mutation({
       latestApprovalId: latestApproval?._id,
     });
 
-    // Return optimistic response - actual revision will be created async
-    // Client should poll for the new revision
-    const placeholderRevisionId = await ctx.db.insert("cleanupRevisions", {
-      bookId: args.bookId,
-      revisionNumber: newRevisionNumber,
-      fileId: "xxx" as unknown as Id<"_storage">, // Will be updated by action
-      sizeBytes: 0,
-      isDeterministic,
-      isAiAssisted,
-      preserveArchaic,
-      createdAt: Date.now(),
-      createdBy: "user",
-      parentRevisionId: args.parentRevisionId ?? latestRevision?._id,
-    });
+    // Return optimistic response while async action creates the real revision.
+    // Do not insert placeholder rows with fake file IDs; schema requires valid
+    // storage IDs whenever fileId is present.
+    const optimisticRevisionId =
+      args.parentRevisionId ??
+      latestRevision?._id ??
+      (() => {
+        throw new Error(
+          "No base revision available for optimistic save response",
+        );
+      })();
 
     return {
-      revisionId: placeholderRevisionId,
+      revisionId: optimisticRevisionId,
       revisionNumber: newRevisionNumber,
       approvalRevoked,
       approvalKept,
