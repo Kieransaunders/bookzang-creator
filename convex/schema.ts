@@ -102,29 +102,34 @@ const applicationTables = {
   }),
 
   // Cleanup revision tracking - immutable original + versioned cleaned revisions
+  // NOTE: Content is stored in Convex File Storage, not in database (1MB limit)
   cleanupOriginals: defineTable({
     bookId: v.id("books"),
-    content: v.string(),
+    fileId: v.id("_storage"),  // Reference to stored original file
     capturedAt: v.number(),
     sourceFormat: v.union(v.literal("gutenberg_txt"), v.literal("markdown")),
+    sizeBytes: v.number(),  // Track original size
   })
     .index("by_book_id", ["bookId"]),
 
   cleanupRevisions: defineTable({
     bookId: v.id("books"),
     revisionNumber: v.number(),
-    content: v.string(),
+    fileId: v.id("_storage"),  // Reference to stored cleaned file
     isDeterministic: v.boolean(),
     isAiAssisted: v.boolean(),
     preserveArchaic: v.boolean(),
     createdAt: v.number(),
     createdBy: v.union(v.literal("system"), v.literal("ai"), v.literal("user")),
     parentRevisionId: v.optional(v.id("cleanupRevisions")),
+    sizeBytes: v.number(),  // Track cleaned size
+    chapterIds: v.optional(v.array(v.id("cleanupChapters"))),  // References to chapter records
   })
     .index("by_book_id", ["bookId"])
     .index("by_book_id_revision", ["bookId", "revisionNumber"]),
 
   // Chapter segmentation - sections of the book with type labels
+  // NOTE: Content is stored in Convex File Storage, not in database (1MB limit)
   cleanupChapters: defineTable({
     bookId: v.id("books"),
     revisionId: v.id("cleanupRevisions"),
@@ -138,12 +143,13 @@ const applicationTables = {
       v.literal("appendix"),
       v.literal("body"),
     ),
-    content: v.string(),
+    fileId: v.id("_storage"),  // Reference to stored chapter content file
     startOffset: v.number(),
     endOffset: v.number(),
     detectedHeading: v.optional(v.string()),
     isUserConfirmed: v.boolean(),
     createdAt: v.number(),
+    sizeBytes: v.number(),  // Track chapter content size
   })
     .index("by_book_id", ["bookId"])
     .index("by_revision_id", ["revisionId"])

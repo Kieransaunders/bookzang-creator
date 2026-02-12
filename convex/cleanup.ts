@@ -44,7 +44,7 @@ export const startCleanup = mutation({
     }
 
     // Create cleanup job
-    const jobId = await ctx.db.insert("cleanupJobs", {
+    const cleanupJobId = await ctx.db.insert("cleanupJobs", {
       bookId: args.bookId,
       stage: "queued",
       status: "queued",
@@ -53,26 +53,39 @@ export const startCleanup = mutation({
       queuedAt: Date.now(),
     });
 
+    // Also create a job in the main jobs table for unified tracking
+    const mainJobId = await ctx.db.insert("jobs", {
+      type: "clean",
+      status: "queued",
+      bookId: args.bookId,
+      stage: "queued",
+      progress: 0,
+      queuedAt: Date.now(),
+    });
+
     // Start the cleanup pipeline (async)
     await ctx.scheduler.runAfter(0, internal.cleanup.runCleanupPipeline, {
       bookId: args.bookId,
       fileId: book.fileId,
-      jobId,
+      jobId: cleanupJobId,
+      mainJobId,
       preserveArchaic: args.preserveArchaic ?? true,
     });
 
-    return { jobId, status: "queued" };
+    return { jobId: cleanupJobId, status: "queued" };
   },
 });
 
 /**
  * Internal action to run the full cleanup pipeline
+ * Stores all content in File Storage to avoid 1MB document limit
  */
 export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAction({
   args: {
     bookId: v.id("books"),
     fileId: v.id("_storage"),
     jobId: v.id("cleanupJobs"),
+    mainJobId: v.optional(v.id("jobs")),
     preserveArchaic: v.boolean(),
   },
   returns: v.object({
@@ -86,6 +99,7 @@ export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAct
       // Update job to loading stage
       await ctx.runMutation(internal.cleanup.updateJobStage, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         stage: "loading_original",
         progress: 10,
       });
@@ -97,17 +111,20 @@ export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAct
       }
 
       const originalContent = await blob.text();
+      const originalSizeBytes = new Blob([originalContent]).size;
 
-      // Store original
+      // Store original reference with size tracking
       await ctx.runMutation(internal.cleanup.insertOriginal, {
         bookId: args.bookId,
-        content: originalContent,
+        fileId: args.fileId,
         sourceFormat: "gutenberg_txt",
+        sizeBytes: originalSizeBytes,
       });
 
       // Run deterministic cleanup
       await ctx.runMutation(internal.cleanup.updateJobStage, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         stage: "boilerplate_removal",
         progress: 30,
       });
@@ -118,45 +135,59 @@ export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAct
         normalizePunctuation: true,
       });
 
-      // Create cleaned revision
+      // Store cleaned content as a file (not in database - 1MB limit)
       await ctx.runMutation(internal.cleanup.updateJobStage, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         stage: "punctuation_normalization",
         progress: 50,
       });
 
+      const cleanedBlob = new Blob([cleanupResult.content], { type: "text/plain" });
+      const cleanedFileId = await ctx.storage.store(cleanedBlob);
+      const cleanedSizeBytes = cleanedBlob.size;
+
       const revisionId = await ctx.runMutation(internal.cleanupPipeline.createCleanupRevision, {
         bookId: args.bookId,
         revisionNumber: 1,
-        content: cleanupResult.content,
+        fileId: cleanedFileId,
         isDeterministic: true,
         isAiAssisted: false,
         preserveArchaic: args.preserveArchaic,
         createdBy: "system",
+        sizeBytes: cleanedSizeBytes,
       });
 
       // Detect and create chapters
       await ctx.runMutation(internal.cleanup.updateJobStage, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         stage: "chapter_detection",
         progress: 70,
       });
 
       const chapterResult = detectChapterBoundaries(cleanupResult.content);
 
-      // Prepare chapters for insertion
-      const chaptersForDb = chapterResult.chapters.map(ch => ({
-        chapterNumber: ch.chapterNumber,
-        title: ch.title,
-        type: ch.type,
-        content: ch.content,
-        startOffset: ch.startOffset,
-        endOffset: ch.endOffset,
-        detectedHeading: ch.detectedHeading ?? undefined,
-        isUserConfirmed: ch.isUserConfirmed,
-        confidence: ch.confidence,
-        isOcrCorrupted: ch.isOcrCorrupted,
-      }));
+      // Store each chapter content as a separate file
+      const chaptersForDb = [];
+      for (const ch of chapterResult.chapters) {
+        const chapterBlob = new Blob([ch.content], { type: "text/plain" });
+        const chapterFileId = await ctx.storage.store(chapterBlob);
+        
+        chaptersForDb.push({
+          chapterNumber: ch.chapterNumber,
+          title: ch.title,
+          type: ch.type,
+          fileId: chapterFileId,
+          startOffset: ch.startOffset,
+          endOffset: ch.endOffset,
+          detectedHeading: ch.detectedHeading ?? undefined,
+          isUserConfirmed: ch.isUserConfirmed,
+          confidence: ch.confidence,
+          isOcrCorrupted: ch.isOcrCorrupted,
+          sizeBytes: chapterBlob.size,
+        });
+      }
 
       const chapterIds = await ctx.runMutation(internal.cleanupPipeline.createChapterRecords, {
         bookId: args.bookId,
@@ -181,6 +212,7 @@ export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAct
       // Create flags for ambiguous content
       await ctx.runMutation(internal.cleanup.updateJobStage, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         stage: "completed",
         progress: 90,
       });
@@ -198,6 +230,7 @@ export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAct
       // Update job to completed
       await ctx.runMutation(internal.cleanup.completeJob, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         revisionId,
         chaptersDetected: chapterResult.chapters.length,
         flagsCreated: flagIds.length + chapterResult.chapters.filter(c => c.isOcrCorrupted).length,
@@ -220,6 +253,7 @@ export const runCleanupPipeline: ReturnType<typeof internalAction> = internalAct
       // Update job to failed
       await ctx.runMutation(internal.cleanup.failJob, {
         jobId: args.jobId,
+        mainJobId: args.mainJobId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -571,12 +605,14 @@ export const getCleanupStatusesForBooks = query({
 
 /**
  * Insert original record
+ * Stores reference to file in storage, not content (1MB limit)
  */
 export const insertOriginal = internalMutation({
   args: {
     bookId: v.id("books"),
-    content: v.string(),
+    fileId: v.id("_storage"),
     sourceFormat: v.union(v.literal("gutenberg_txt"), v.literal("markdown")),
+    sizeBytes: v.number(),
   },
   returns: v.id("cleanupOriginals"),
   handler: async (ctx, args) => {
@@ -591,9 +627,10 @@ export const insertOriginal = internalMutation({
 
     return await ctx.db.insert("cleanupOriginals", {
       bookId: args.bookId,
-      content: args.content,
+      fileId: args.fileId,
       capturedAt: Date.now(),
       sourceFormat: args.sourceFormat,
+      sizeBytes: args.sizeBytes,
     });
   },
 });
@@ -604,6 +641,7 @@ export const insertOriginal = internalMutation({
 export const updateJobStage = internalMutation({
   args: {
     jobId: v.id("cleanupJobs"),
+    mainJobId: v.optional(v.id("jobs")),
     stage: v.union(
       v.literal("queued"),
       v.literal("loading_original"),
@@ -623,15 +661,32 @@ export const updateJobStage = internalMutation({
       progress: args.progress,
     };
 
-    if (args.stage === "loading_original") {
-      const job = await ctx.db.get(args.jobId);
-      if (job && !job.startedAt) {
-        update.startedAt = Date.now();
-        update.status = "running";
-      }
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return null;
+
+    if (args.stage === "loading_original" && !job.startedAt) {
+      update.startedAt = Date.now();
+      update.status = "running";
     }
 
     await ctx.db.patch(args.jobId, update);
+
+    // Also update the corresponding main job if provided
+    if (args.mainJobId) {
+      const mainJob = await ctx.db.get(args.mainJobId);
+      if (mainJob) {
+        const mainUpdate: Record<string, unknown> = {
+          stage: args.stage,
+          progress: args.progress,
+        };
+        if (args.stage === "loading_original" && !mainJob.startedAt) {
+          mainUpdate.startedAt = Date.now();
+          mainUpdate.status = "running";
+        }
+        await ctx.db.patch(args.mainJobId, mainUpdate);
+      }
+    }
+
     return null;
   },
 });
@@ -642,6 +697,7 @@ export const updateJobStage = internalMutation({
 export const completeJob = internalMutation({
   args: {
     jobId: v.id("cleanupJobs"),
+    mainJobId: v.optional(v.id("jobs")),
     revisionId: v.id("cleanupRevisions"),
     chaptersDetected: v.number(),
     flagsCreated: v.number(),
@@ -657,6 +713,17 @@ export const completeJob = internalMutation({
       progress: 100,
       completedAt: Date.now(),
     });
+
+    // Also update the corresponding main job if provided
+    if (args.mainJobId) {
+      await ctx.db.patch(args.mainJobId, {
+        status: "completed",
+        stage: "completed",
+        progress: 100,
+        completedAt: Date.now(),
+      });
+    }
+
     return null;
   },
 });
@@ -667,6 +734,7 @@ export const completeJob = internalMutation({
 export const failJob = internalMutation({
   args: {
     jobId: v.id("cleanupJobs"),
+    mainJobId: v.optional(v.id("jobs")),
     error: v.string(),
   },
   returns: v.null(),
@@ -675,6 +743,16 @@ export const failJob = internalMutation({
       status: "failed",
       error: args.error,
     });
+
+    // Also update the corresponding main job if provided
+    if (args.mainJobId) {
+      await ctx.db.patch(args.mainJobId, {
+        status: "failed",
+        error: args.error,
+        failedAt: Date.now(),
+      });
+    }
+
     return null;
   },
 });

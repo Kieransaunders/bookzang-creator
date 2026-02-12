@@ -305,34 +305,38 @@ export const runDeterministicCleanupAction = internalAction({
 
 /**
  * Internal mutation to create a cleanup revision
+ * Stores content in file storage, not database (1MB limit)
  */
 export const createCleanupRevision = internalMutation({
   args: {
     bookId: v.id("books"),
     revisionNumber: v.number(),
-    content: v.string(),
+    fileId: v.id("_storage"),
     isDeterministic: v.boolean(),
     isAiAssisted: v.boolean(),
     preserveArchaic: v.boolean(),
     createdBy: v.union(v.literal("system"), v.literal("ai"), v.literal("user")),
+    sizeBytes: v.number(),
   },
   returns: v.id("cleanupRevisions"),
   handler: async (ctx, args) => {
     return await ctx.db.insert("cleanupRevisions", {
       bookId: args.bookId,
       revisionNumber: args.revisionNumber,
-      content: args.content,
+      fileId: args.fileId,
       isDeterministic: args.isDeterministic,
       isAiAssisted: args.isAiAssisted,
       preserveArchaic: args.preserveArchaic,
       createdAt: Date.now(),
       createdBy: args.createdBy,
+      sizeBytes: args.sizeBytes,
     });
   },
 });
 
 /**
  * Internal mutation to create chapter records
+ * Stores content in file storage, not database (1MB limit)
  */
 export const createChapterRecords = internalMutation({
   args: {
@@ -349,13 +353,14 @@ export const createChapterRecords = internalMutation({
         v.literal("appendix"),
         v.literal("body"),
       ),
-      content: v.string(),
+      fileId: v.id("_storage"),  // Reference to stored chapter file
       startOffset: v.number(),
       endOffset: v.number(),
       detectedHeading: v.optional(v.string()),
       isUserConfirmed: v.boolean(),
       confidence: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
       isOcrCorrupted: v.boolean(),
+      sizeBytes: v.number(),  // Track chapter size
     })),
   },
   returns: v.array(v.id("cleanupChapters")),
@@ -368,12 +373,13 @@ export const createChapterRecords = internalMutation({
         chapterNumber: chapter.chapterNumber,
         title: chapter.title,
         type: chapter.type,
-        content: chapter.content,
+        fileId: chapter.fileId,
         startOffset: chapter.startOffset,
         endOffset: chapter.endOffset,
         detectedHeading: chapter.detectedHeading,
         isUserConfirmed: chapter.isUserConfirmed,
         createdAt: Date.now(),
+        sizeBytes: chapter.sizeBytes,
       });
       chapterIds.push(id);
     }
