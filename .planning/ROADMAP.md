@@ -13,7 +13,7 @@ This roadmap turns BookZang from a scaffolded dashboard into a production pipeli
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Book Intake and Pipeline Visibility** - Local text intake and job observability are working end to end.
+- [x] **Phase 1: Book Intake and Pipeline Visibility** - Local text intake and job observability are working end to end.
 - [ ] **Phase 2: Text Cleanup and Editorial Approval** - Gutenberg cleanup and human approval flow produce trusted final text.
 - [ ] **Phase 3: Typography Templates and KDP Interior Export** - Approved text renders into validated KDP-ready interior PDFs.
 - [ ] **Phase 4: Cover Packaging and Batch Automation** - Folder lifecycle, Canva cover workflow, and local batch runs support production throughput.
@@ -36,9 +36,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 
-- [ ] 01-01-PLAN.md — Build unified Convex intake pipeline, schema, dedupe, and metadata extraction action
-- [ ] 01-02-PLAN.md — Implement manual upload and discovery candidate UX plus local discovery scanner script
-- [ ] 01-03-PLAN.md — Deliver grouped jobs observability with stage/progress and expandable failure details
+- [x] 01-01-PLAN.md — Build unified Convex intake pipeline, schema, dedupe, and metadata extraction action
+- [x] 01-02-PLAN.md — Implement manual upload and discovery candidate UX plus local discovery scanner script
+- [x] 01-03-PLAN.md — Deliver grouped jobs observability with stage/progress and expandable failure details
 
 ### Phase 2: Text Cleanup and Editorial Approval
 
@@ -106,9 +106,9 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
-| Phase                                           | Plans Complete | Status      | Completed |
-| ----------------------------------------------- | -------------- | ----------- | --------- |
-| 1. Book Intake and Pipeline Visibility          | 0/3            | Not started | -         |
-| 2. Text Cleanup and Editorial Approval          | 0/4            | Planned     | -         |
-| 3. Typography Templates and KDP Interior Export | 4/4            | Planned     | -         |
-| 4. Cover Packaging and Batch Automation         | 0/TBD          | Not started | -         |
+| Phase                                           | Plans Complete | Status      | Completed  |
+| ----------------------------------------------- | -------------- | ----------- | ---------- |
+| 1. Book Intake and Pipeline Visibility          | 3/3            | Complete    | 2026-02-12 |
+| 2. Text Cleanup and Editorial Approval          | 0/4            | Planned     | -          |
+| 3. Typography Templates and KDP Interior Export | 4/4            | Planned     | -          |
+| 4. Cover Packaging and Batch Automation         | 0/TBD          | Not started | -          |
