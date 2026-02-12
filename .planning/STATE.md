@@ -12,7 +12,7 @@ See: `.planning/PROJECT.md` (updated 2026-02-12)
 Phase: 2 of 4 (Text Cleanup and Editorial Approval)
 Plan: 3 of 4 in current phase (03 complete, 1 remaining)
 Status: Executing
-Last activity: 2026-02-12 - Completed Plan 02-03: Side-by-side editorial review UI
+Last activity: 2026-02-12 - Completed Plan 02-02: AI-assisted cleanup adapter
 
 Progress: [█████████░] 85% (Phase 1 complete, Phase 2 executing)
 
@@ -38,7 +38,7 @@ Progress: [█████████░] 85% (Phase 1 complete, Phase 2 execut
 
 _Updated after each plan completion_
 | Phase 02-text-cleanup-and-editorial-approval P03 | 22 min | 3 tasks | 8 files |
-| Phase 02-text-cleanup-and-editorial-approval P02 | 18 min | 2 tasks | 5 files |
+| Phase 02-text-cleanup-and-editorial-approval P02 | 18 min | 3 tasks | 7 files |
 | Phase 02-text-cleanup-and-editorial-approval P01 | 15 min | 3 tasks | 6 files |
 | Phase 01-book-intake-and-pipeline-visibility P03 | 5 min | 3 tasks | 4 files |
 | Phase 01-book-intake-and-pipeline-visibility P02 | 9 min | 3 tasks | 7 files |
@@ -67,6 +67,11 @@ Recent decisions affecting current work:
 - [Phase 02-03]: Side-by-side merge editor built with CodeMirror MergeView, original read-only, cleaned editable, debounced saves.
 - [Phase 02-03]: Flag resolution UI supports accept/reject/override actions plus boundary-to-chapter promotion.
 - [Phase 02-03]: Review page entry point from Library for books with "cleaned" status.
+- [Phase 02-02]: Kimi K2 AI cleanup integrated via provider-adapter boundary (cleanupAiClient.ts).
+- [Phase 02-02]: Text chunked into 8KB segments with 200char overlap for API limits.
+- [Phase 02-02]: AI patches validated (offsets, text matching) before application.
+- [Phase 02-02]: Low-confidence patches create unresolved flags blocking approval.
+- [Phase 02-02]: Approval checklist enforced: boilerplate, chapters, punctuation, archaic.
 - [Phase 1 Enhancement]: Import modal enhanced with multi-format support (.txt/.md/.epub) and smart metadata inference during execution.
 
 ### Pending Todos
@@ -82,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-12 12:15
-Stopped at: Completed 02-03-PLAN.md, ready for 02-04 (Approval gating)
-Resume file: .planning/phases/02-text-cleanup-and-editorial-approval/02-text-cleanup-and-editorial-approval-03-SUMMARY.md
+Last session: 2026-02-12 12:17
+Stopped at: Completed 02-02-PLAN.md (AI-assisted cleanup adapter)
+Resume file: .planning/phases/02-text-cleanup-and-editorial-approval/02-text-cleanup-and-editorial-approval-02-SUMMARY.md
