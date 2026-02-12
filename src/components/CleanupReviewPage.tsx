@@ -11,6 +11,7 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { CleanupMergeEditor } from "./CleanupMergeEditor";
 import { CleanupFlagsPanel } from "./CleanupFlagsPanel";
+import { ApprovalChecklistDialog } from "./ApprovalChecklistDialog";
 
 import {
   ArrowLeft,
@@ -21,6 +22,7 @@ import {
   Layers,
   Flag,
   Clock,
+  Shield,
 } from "lucide-react";
 
 interface CleanupReviewPageProps {
@@ -41,7 +43,9 @@ interface CleanupReviewPageProps {
 export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
   // Load review data
   const reviewData = useQuery(api.cleanup.getReviewData, { bookId });
+  const approvalState = useQuery(api.cleanup.getApprovalState, { bookId });
   const saveRevision = useMutation(api.cleanup.saveCleanedRevision);
+  const approveRevision = useMutation(api.cleanup.approveRevision);
 
   // Local state for editing
   const [editedText, setEditedText] = useState<string>("");
@@ -50,30 +54,101 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<"chapters" | "flags">("flags");
 
+  // Approval dialog state
+  const [isApprovalDialogOpen, setIsApprovalDialogOpen] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+
+  // Post-approval edit prompt state
+  const [showPostApprovalPrompt, setShowPostApprovalPrompt] = useState(false);
+  const [pendingSaveContent, setPendingSaveContent] = useState<string | null>(null);
+
   // Initialize edited text when review data loads
   const handleCleanedChange = useCallback((text: string) => {
     setEditedText(text);
     setSaveError(null);
   }, []);
 
-  // Handle save
-  const handleSave = async () => {
+  // Check if save would trigger post-approval edit flow
+  const checkPostApprovalSave = useCallback(() => {
+    // If book is approved and we're editing the approved revision
+    if (approvalState?.isApproved && approvalState?.approvalValid && editedText !== reviewData?.revision?.content) {
+      setPendingSaveContent(editedText);
+      setShowPostApprovalPrompt(true);
+      return true;
+    }
+    return false;
+  }, [approvalState, editedText, reviewData?.revision?.content]);
+
+  // Handle save with optional keepApproval parameter
+  const performSave = async (keepApproval?: boolean) => {
     if (!reviewData?.revision) return;
 
     setIsSaving(true);
     setSaveError(null);
 
     try {
-      await saveRevision({
+      const result = await saveRevision({
         bookId,
         content: editedText,
         parentRevisionId: reviewData.revision._id,
+        keepApproval,
       });
       setLastSaved(new Date());
+      
+      // Show feedback if approval was affected
+      if (result.approvalRevoked) {
+        setSaveError("Approval revoked: A new revision was created. Re-approval required for export.");
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save revision");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Handle save button click
+  const handleSave = async () => {
+    if (checkPostApprovalSave()) {
+      return; // Prompt will handle the save
+    }
+    await performSave();
+  };
+
+  // Handle post-approval edit choice
+  const handlePostApprovalChoice = async (keepApproval: boolean) => {
+    setShowPostApprovalPrompt(false);
+    await performSave(keepApproval);
+  };
+
+  // Handle approval
+  const handleApprove = async (checklist: {
+    boilerplateRemoved: boolean;
+    chapterBoundariesVerified: boolean;
+    punctuationReviewed: boolean;
+    archaicPreserved: boolean;
+  }) => {
+    if (!reviewData?.revision) return;
+
+    setIsApproving(true);
+    setApprovalError(null);
+
+    try {
+      const result = await approveRevision({
+        bookId,
+        revisionId: reviewData.revision._id,
+        checklistConfirmed: checklist,
+      });
+
+      if (result.success) {
+        setIsApprovalDialogOpen(false);
+      } else {
+        setApprovalError(result.error || "Approval failed");
+      }
+    } catch (err) {
+      setApprovalError(err instanceof Error ? err.message : "Approval failed");
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -140,7 +215,12 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
           <div className="flex items-center gap-4">
             {/* Status indicators */}
             <div className="flex items-center gap-3">
-              {unresolvedCount > 0 ? (
+              {approvalState?.approvalValid ? (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/20 text-green-300 rounded-full text-sm">
+                  <Shield size={14} />
+                  Approved
+                </span>
+              ) : unresolvedCount > 0 ? (
                 <span className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/20 text-yellow-300 rounded-full text-sm">
                   <Flag size={14} />
                   {unresolvedCount} unresolved
@@ -187,6 +267,27 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
                 </>
               )}
             </button>
+
+            {/* Approve button - only show if not already approved */}
+            {!approvalState?.approvalValid && (
+              <button
+                onClick={() => setIsApprovalDialogOpen(true)}
+                disabled={!canApprove}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                  canApprove
+                    ? "bg-green-500 hover:bg-green-600 text-white"
+                    : "bg-slate-700 text-slate-400 cursor-not-allowed"
+                }`}
+                title={
+                  !canApprove
+                    ? `Resolve ${unresolvedCount} flag(s) to enable approval`
+                    : "Approve this cleanup for export"
+                }
+              >
+                <Shield size={18} />
+                Approve
+              </button>
+            )}
           </div>
         </div>
 
@@ -317,27 +418,122 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
           <div className="p-4 border-t border-white/10">
             <div
               className={`p-3 rounded-lg text-sm ${
-                canApprove
+                approvalState?.approvalValid
                   ? "bg-green-500/10 border border-green-500/30"
-                  : "bg-yellow-500/10 border border-yellow-500/30"
+                  : canApprove
+                    ? "bg-green-500/10 border border-green-500/30"
+                    : "bg-yellow-500/10 border border-yellow-500/30"
               }`}
             >
               <p
                 className={`font-medium ${
-                  canApprove ? "text-green-300" : "text-yellow-300"
+                  approvalState?.approvalValid || canApprove
+                    ? "text-green-300"
+                    : "text-yellow-300"
                 }`}
               >
-                {canApprove ? "Ready for Approval" : "Approval Blocked"}
+                {approvalState?.approvalValid
+                  ? "Approved for Export"
+                  : canApprove
+                    ? "Ready for Approval"
+                    : "Approval Blocked"}
               </p>
               <p className="text-slate-400 mt-1">
-                {canApprove
-                  ? "All flags resolved. You can approve this cleanup."
-                  : `Resolve ${unresolvedCount} flag${unresolvedCount !== 1 ? "s" : ""} to enable approval.`}
+                {approvalState?.approvalValid
+                  ? "This cleanup is approved. Downstream template and export actions are unlocked."
+                  : canApprove
+                    ? "All flags resolved. You can approve this cleanup."
+                    : `Resolve ${unresolvedCount} flag${unresolvedCount !== 1 ? "s" : ""} to enable approval.`}
               </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Approval Checklist Dialog */}
+      <ApprovalChecklistDialog
+        isOpen={isApprovalDialogOpen}
+        onClose={() => {
+          setIsApprovalDialogOpen(false);
+          setApprovalError(null);
+        }}
+        onApprove={handleApprove}
+        unresolvedFlagCount={unresolvedCount}
+        isApproving={isApproving}
+      />
+
+      {/* Post-Approval Edit Prompt Modal */}
+      {showPostApprovalPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowPostApprovalPrompt(false)}
+          />
+          <div className="relative w-full max-w-md liquid-glass-strong rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
+                <AlertCircle size={20} className="text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">
+                  Approval Status
+                </h3>
+                <p className="text-sm text-slate-400">
+                  This book is currently approved for export
+                </p>
+              </div>
+            </div>
+
+            <p className="text-slate-300 mb-6">
+              You&apos;ve edited the cleaned text after approval. Choose how to
+              handle the approval status for this new revision:
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => handlePostApprovalChoice(true)}
+                className="w-full p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-xl text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <CheckCircle size={20} className="text-green-400" />
+                  <div>
+                    <p className="font-medium text-green-300">
+                      Keep Approval
+                    </p>
+                    <p className="text-sm text-green-200/70">
+                      New revision is approved; export remains unlocked
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handlePostApprovalChoice(false)}
+                className="w-full p-4 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-xl text-left transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Shield size={20} className="text-yellow-400" />
+                  <div>
+                    <p className="font-medium text-yellow-300">
+                      Revoke Approval
+                    </p>
+                    <p className="text-sm text-yellow-200/70">
+                      New revision requires re-approval before export
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowPostApprovalPrompt(false)}
+              className="w-full mt-4 py-2 text-slate-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
