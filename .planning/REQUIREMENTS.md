@@ -88,39 +88,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| ING-01      | TBD   | Pending |
-| ING-02      | TBD   | Pending |
-| ING-03      | TBD   | Pending |
-| ING-04      | TBD   | Pending |
-| ING-05      | TBD   | Pending |
-| CLEAN-01    | TBD   | Pending |
-| CLEAN-02    | TBD   | Pending |
-| CLEAN-03    | TBD   | Pending |
-| CLEAN-04    | TBD   | Pending |
-| CLEAN-05    | TBD   | Pending |
-| REVIEW-01   | TBD   | Pending |
-| REVIEW-02   | TBD   | Pending |
-| REVIEW-03   | TBD   | Pending |
-| TPL-01      | TBD   | Pending |
-| TPL-02      | TBD   | Pending |
-| TPL-03      | TBD   | Pending |
-| TPL-04      | TBD   | Pending |
-| TPL-05      | TBD   | Pending |
-| OUT-01      | TBD   | Pending |
-| OUT-02      | TBD   | Pending |
-| OUT-03      | TBD   | Pending |
-| OUT-04      | TBD   | Pending |
-| OPS-01      | TBD   | Pending |
-| OPS-02      | TBD   | Pending |
-| OPS-03      | TBD   | Pending |
+| ING-01      | 1     | Pending |
+| ING-02      | 1     | Pending |
+| ING-03      | 1     | Pending |
+| ING-04      | 4     | Pending |
+| ING-05      | 4     | Pending |
+| CLEAN-01    | 2     | Pending |
+| CLEAN-02    | 2     | Pending |
+| CLEAN-03    | 2     | Pending |
+| CLEAN-04    | 2     | Pending |
+| CLEAN-05    | 2     | Pending |
+| REVIEW-01   | 2     | Pending |
+| REVIEW-02   | 2     | Pending |
+| REVIEW-03   | 2     | Pending |
+| TPL-01      | 3     | Pending |
+| TPL-02      | 3     | Pending |
+| TPL-03      | 3     | Pending |
+| TPL-04      | 3     | Pending |
+| TPL-05      | 3     | Pending |
+| OUT-01      | 3     | Pending |
+| OUT-02      | 3     | Pending |
+| OUT-03      | 4     | Pending |
+| OUT-04      | 3     | Pending |
+| OPS-01      | 1     | Pending |
+| OPS-02      | 1     | Pending |
+| OPS-03      | 4     | Pending |
 
 **Coverage:**
 
 - v1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-02-12_
-_Last updated: 2026-02-12 after initial definition_
+_Last updated: 2026-02-12 after roadmap mapping_
