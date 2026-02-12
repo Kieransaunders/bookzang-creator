@@ -11,10 +11,10 @@ See: `.planning/PROJECT.md` (updated 2026-02-12)
 
 Phase: 1 of 4 (Book Intake and Pipeline Visibility)
 Plan: 3 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-12 - Completed plan 01-03 pipeline observability UX.
+Status: Complete
+Last activity: 2026-02-12 - Completed plan 01-02 operator intake UX and discovery scanner.
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -37,6 +37,7 @@ Progress: [███████░░░] 67%
 
 _Updated after each plan completion_
 | Phase 01-book-intake-and-pipeline-visibility P03 | 5 min | 3 tasks | 4 files |
+| Phase 01-book-intake-and-pipeline-visibility P02 | 9 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -53,6 +54,9 @@ Recent decisions affecting current work:
 - [Phase 01-book-intake-and-pipeline-visibility]: Fail extraction when no file exists and persist job/book failure details for operator review.
 - [Phase 01-book-intake-and-pipeline-visibility]: Use grouped summary query as default jobs view so multi-job books are monitored by state first.
 - [Phase 01-book-intake-and-pipeline-visibility]: Centralize canonical status/stage labels in src/lib/jobStatus.ts to avoid done/error drift across list and drawer.
+- [Phase 01-book-intake-and-pipeline-visibility]: Manual upload now enforces duplicate-block with explicit override before re-enqueue for intentional duplicates.
+- [Phase 01-book-intake-and-pipeline-visibility]: Discovery candidates remain visible before and after enqueue with in-place status transitions for operator tracking.
+- [Phase 01-book-intake-and-pipeline-visibility]: Local discovery sync runs in chunked ConvexHttpClient batches with optional DISCOVER_LIMIT for large corpora.
 
 ### Pending Todos
 
@@ -67,6 +71,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-12 10:34
-Stopped at: Completed 01-book-intake-and-pipeline-visibility-03-PLAN.md
+Last session: 2026-02-12 10:39
+Stopped at: Completed 01-book-intake-and-pipeline-visibility-02-PLAN.md
 Resume file: None
