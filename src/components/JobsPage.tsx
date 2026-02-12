@@ -21,6 +21,17 @@ import {
 export function JobsPage() {
   const groups = useQuery(api.jobs.listGroupedSummary);
   const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | null>(null);
+  const [expandedFailures, setExpandedFailures] = useState<
+    Record<string, boolean>
+  >({});
+
+  const toggleFailure = (jobId: Id<"jobs">) => {
+    const key = String(jobId);
+    setExpandedFailures((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -156,8 +167,46 @@ export function JobsPage() {
                     </div>
 
                     {job.status === "failed" && job.errorSnippet && (
-                      <div className="mt-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
-                        {job.errorSnippet}
+                      <div className="mt-2 space-y-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+                        <p>{job.errorSnippet}</p>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="text-rose-100 underline underline-offset-2"
+                            onClick={() => toggleFailure(job._id)}
+                          >
+                            {expandedFailures[String(job._id)]
+                              ? "Hide inline details"
+                              : "Expand inline details"}
+                          </button>
+                          <button
+                            type="button"
+                            className="text-rose-100 underline underline-offset-2"
+                            onClick={() => setSelectedJobId(job._id)}
+                          >
+                            Open drawer
+                          </button>
+                        </div>
+
+                        {expandedFailures[String(job._id)] && (
+                          <div className="space-y-2 rounded-md border border-rose-500/25 bg-black/20 p-2">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-rose-100">
+                              Full error details
+                            </p>
+                            <pre className="whitespace-pre-wrap break-words text-[11px] text-rose-100 font-mono">
+                              {job.errorDetails ??
+                                job.error ??
+                                "No detailed error available"}
+                            </pre>
+
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-rose-100">
+                              Logs
+                            </p>
+                            <pre className="whitespace-pre-wrap break-words text-[11px] text-rose-100 font-mono max-h-28 overflow-y-auto">
+                              {job.logs ?? "No logs available"}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

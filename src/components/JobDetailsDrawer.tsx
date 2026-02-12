@@ -3,6 +3,11 @@ import { api } from "../../convex/_generated/api";
 
 import { X, Clock, Play, CheckCircle, XCircle } from "lucide-react";
 import { Id } from "../../convex/_generated/dataModel";
+import {
+  getJobStageLabel,
+  getJobStatusBadgeClass,
+  getJobStatusLabel,
+} from "../lib/jobStatus";
 
 interface JobDetailsDrawerProps {
   jobId: Id<"jobs">;
@@ -14,21 +19,16 @@ export function JobDetailsDrawer({ jobId, onClose }: JobDetailsDrawerProps) {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "queued": return <Clock className="text-yellow-400" size={20} />;
-      case "running": return <Play className="text-blue-400" size={20} />;
-      case "done": return <CheckCircle className="text-green-400" size={20} />;
-      case "error": return <XCircle className="text-red-400" size={20} />;
-      default: return <Clock className="text-gray-400" size={20} />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "queued": return "text-yellow-300";
-      case "running": return "text-blue-300";
-      case "done": return "text-green-300";
-      case "error": return "text-red-300";
-      default: return "text-gray-300";
+      case "queued":
+        return <Clock className="text-yellow-400" size={20} />;
+      case "running":
+        return <Play className="text-blue-400" size={20} />;
+      case "completed":
+        return <CheckCircle className="text-green-400" size={20} />;
+      case "failed":
+        return <XCircle className="text-red-400" size={20} />;
+      default:
+        return <Clock className="text-gray-400" size={20} />;
     }
   };
 
@@ -55,10 +55,17 @@ export function JobDetailsDrawer({ jobId, onClose }: JobDetailsDrawerProps) {
             <label className="text-sm font-medium text-slate-300">Status</label>
             <div className="flex items-center gap-3">
               {getStatusIcon(job.status)}
-              <span className={`font-medium capitalize ${getStatusColor(job.status)}`}>
-                {job.status}
+              <span
+                className={`rounded-full border px-2 py-1 text-xs ${getJobStatusBadgeClass(job.status)}`}
+              >
+                {getJobStatusLabel(job.status)}
               </span>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-300">Stage</label>
+            <span className="text-white">{getJobStageLabel(job.stage)}</span>
           </div>
 
           {/* Type */}
@@ -70,7 +77,9 @@ export function JobDetailsDrawer({ jobId, onClose }: JobDetailsDrawerProps) {
           {/* Gutenberg ID */}
           {job.gutenbergId && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Gutenberg ID</label>
+              <label className="text-sm font-medium text-slate-300">
+                Gutenberg ID
+              </label>
               <span className="text-white">#{job.gutenbergId}</span>
             </div>
           )}
@@ -78,10 +87,12 @@ export function JobDetailsDrawer({ jobId, onClose }: JobDetailsDrawerProps) {
           {/* Progress */}
           {job.progress !== undefined && job.progress > 0 && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Progress</label>
+              <label className="text-sm font-medium text-slate-300">
+                Progress
+              </label>
               <div className="space-y-2">
                 <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-blue-500 transition-all duration-300"
                     style={{ width: `${job.progress}%` }}
                   />
@@ -93,18 +104,24 @@ export function JobDetailsDrawer({ jobId, onClose }: JobDetailsDrawerProps) {
 
           {/* Created */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300">Created</label>
+            <label className="text-sm font-medium text-slate-300">
+              Created
+            </label>
             <span className="text-white">
               {new Date(job._creationTime).toLocaleString()}
             </span>
           </div>
 
           {/* Error */}
-          {job.error && (
+          {(job.error || job.errorDetails) && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Error</label>
+              <label className="text-sm font-medium text-slate-300">
+                Error Details
+              </label>
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <span className="text-red-300 text-sm">{job.error}</span>
+                <pre className="text-red-200 text-xs whitespace-pre-wrap break-words font-mono">
+                  {job.errorDetails ?? job.error}
+                </pre>
               </div>
             </div>
           )}
