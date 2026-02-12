@@ -23,7 +23,7 @@ export function Dashboard() {
   ];
 
   const pageTitle = {
-    library: "Library",
+    library: "Library Intake",
     jobs: "Jobs",
     templates: "Templates",
   }[currentPage];
@@ -46,7 +46,7 @@ export function Dashboard() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
-              
+
               return (
                 <button
                   key={item.id}
@@ -82,7 +82,7 @@ export function Dashboard() {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
               >
                 <Plus size={20} />
-                Import Book
+                Upload File
               </button>
             )}
           </div>

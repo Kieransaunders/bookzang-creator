@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 const internalApi = internal as any;
 
@@ -244,5 +244,30 @@ export const enqueueDiscoveryCandidate = mutation({
       candidateId: candidate._id,
       ...enqueued,
     };
+  },
+});
+
+export const listDiscoveryCandidates = query({
+  args: {},
+  handler: async (ctx) => {
+    const candidates = await ctx.db
+      .query("discoveryCandidates")
+      .order("desc")
+      .collect();
+
+    return await Promise.all(
+      candidates.map(async (candidate) => {
+        const existingBook = candidate.linkedBookId
+          ? await ctx.db.get(candidate.linkedBookId)
+          : await findBookByGutenbergId(ctx, candidate.gutenbergId);
+
+        return {
+          ...candidate,
+          existingBookId: existingBook?._id,
+          existingBookTitle: existingBook?.title,
+          existingBookAuthor: existingBook?.author,
+        };
+      }),
+    );
   },
 });

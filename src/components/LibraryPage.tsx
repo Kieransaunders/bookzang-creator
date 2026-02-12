@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { DiscoveryCandidatesPanel } from "./DiscoveryCandidatesPanel";
 
 import { Search, Book, User, Calendar, FileText, Download } from "lucide-react";
 
@@ -86,6 +87,8 @@ export function LibraryPage() {
       </div>
 
       {/* Books Grid */}
+      <DiscoveryCandidatesPanel />
+
       {books.length === 0 ? (
         <div className="text-center py-12">
           <Book className="mx-auto mb-4 text-slate-400" size={48} />
