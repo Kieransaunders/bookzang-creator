@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { Id } from "../../convex/_generated/dataModel";
 import { DiscoveryCandidatesPanel } from "./DiscoveryCandidatesPanel";
 
-import { Search, Book, User, Calendar, FileText, Download } from "lucide-react";
+import { Search, Book, User, Calendar, FileText, Download, Edit3 } from "lucide-react";
 
-export function LibraryPage() {
+interface LibraryPageProps {
+  onEnterReview?: (bookId: Id<"books">) => void;
+}
+
+export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   const [search, setSearch] = useState("");
   const books = useQuery(api.books.list, { search: search || undefined });
 
@@ -106,7 +111,7 @@ export function LibraryPage() {
             <div
               key={book._id}
               id={`book-${book._id}`}
-              className="p-4 rounded-lg liquid-glass hover:border-white/30 transition-all cursor-pointer"
+              className="p-4 rounded-lg liquid-glass hover:border-white/30 transition-all"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
@@ -138,6 +143,17 @@ export function LibraryPage() {
                     </span>
                   </div>
                 </div>
+
+                {/* Review button for cleaned books */}
+                {book.status === "cleaned" && onEnterReview && (
+                  <button
+                    onClick={() => onEnterReview(book._id)}
+                    className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-colors text-sm"
+                  >
+                    <Edit3 size={14} />
+                    Review Cleanup
+                  </button>
+                )}
               </div>
             </div>
           ))}

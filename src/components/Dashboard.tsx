@@ -1,20 +1,33 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { Id } from "../../convex/_generated/dataModel";
 
 import { Library, Briefcase, FileText, Plus } from "lucide-react";
 import { LibraryPage } from "./LibraryPage";
 import { JobsPage } from "./JobsPage";
 import { TemplatesPage } from "./TemplatesPage";
 import { ImportModal } from "./ImportModal";
+import { CleanupReviewPage } from "./CleanupReviewPage";
 import { SignOutButton } from "../SignOutButton";
 
-type Page = "library" | "jobs" | "templates";
+type Page = "library" | "jobs" | "templates" | "cleanup-review";
 
 export function Dashboard() {
   const [currentPage, setCurrentPage] = useState<Page>("library");
   const [showImportModal, setShowImportModal] = useState(false);
+  const [reviewBookId, setReviewBookId] = useState<Id<"books"> | null>(null);
   const loggedInUser = useQuery(api.auth.loggedInUser);
+
+  const handleEnterReview = (bookId: Id<"books">) => {
+    setReviewBookId(bookId);
+    setCurrentPage("cleanup-review");
+  };
+
+  const handleExitReview = () => {
+    setReviewBookId(null);
+    setCurrentPage("library");
+  };
 
   const navItems = [
     { id: "library" as const, label: "Library", icon: Library },
@@ -88,10 +101,15 @@ export function Dashboard() {
           </div>
 
           {/* Page Content */}
-          <div className="p-6 h-[calc(100%-88px)] overflow-auto">
-            {currentPage === "library" && <LibraryPage />}
+          <div className="h-[calc(100%-88px)] overflow-auto">
+            {currentPage === "library" && (
+              <LibraryPage onEnterReview={handleEnterReview} />
+            )}
             {currentPage === "jobs" && <JobsPage />}
             {currentPage === "templates" && <TemplatesPage />}
+            {currentPage === "cleanup-review" && reviewBookId && (
+              <CleanupReviewPage bookId={reviewBookId} onExit={handleExitReview} />
+            )}
           </div>
         </div>
       </div>

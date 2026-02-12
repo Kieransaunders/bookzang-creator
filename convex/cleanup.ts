@@ -391,6 +391,67 @@ export const promoteBoundaryToChapter: ReturnType<typeof mutation> = mutation({
 });
 
 /**
+ * Save a new cleaned revision from reviewer edits
+ * Creates a new revision with user as the creator
+ */
+export const saveCleanedRevision = mutation({
+  args: {
+    bookId: v.id("books"),
+    content: v.string(),
+    parentRevisionId: v.optional(v.id("cleanupRevisions")),
+  },
+  returns: v.object({
+    revisionId: v.id("cleanupRevisions"),
+    revisionNumber: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    // Get current user
+    const user = await ctx.auth.getUserIdentity();
+    if (!user) {
+      throw new Error("Must be authenticated to save revisions");
+    }
+
+    // Verify book exists
+    const book = await ctx.db.get(args.bookId);
+    if (!book) {
+      throw new Error(`Book ${args.bookId} not found`);
+    }
+
+    // Get the latest revision to determine new revision number
+    const latestRevisions = await ctx.db.query("cleanupRevisions")
+      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+      .order("desc")
+      .take(1);
+
+    const latestRevision = latestRevisions[0];
+    const newRevisionNumber = latestRevision ? latestRevision.revisionNumber + 1 : 1;
+
+    // Inherit properties from parent revision if available
+    const isDeterministic = latestRevision?.isDeterministic ?? false;
+    const isAiAssisted = latestRevision?.isAiAssisted ?? false;
+    const preserveArchaic = latestRevision?.preserveArchaic ?? true;
+
+    // Create new revision
+    const revisionId = await ctx.db.insert("cleanupRevisions", {
+      bookId: args.bookId,
+      revisionNumber: newRevisionNumber,
+      content: args.content,
+      isDeterministic,
+      isAiAssisted,
+      preserveArchaic,
+      createdAt: Date.now(),
+      createdBy: "user",
+      parentRevisionId: args.parentRevisionId ?? latestRevision?._id,
+    });
+
+    return {
+      revisionId,
+      revisionNumber: newRevisionNumber,
+    };
+  },
+});
+
+/**
  * Get cleanup job status
  */
 export const getCleanupStatus = query({
