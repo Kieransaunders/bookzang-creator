@@ -89,3 +89,92 @@ export const updateTemplate = mutation({
     });
   },
 });
+
+/**
+ * Check if a book is ready for downstream actions (template/export)
+ * Book must have status "ready" meaning cleanup is approved
+ */
+export const getDownstreamReadiness = query({
+  args: {
+    bookId: v.id("books"),
+  },
+  returns: v.object({
+    isReady: v.boolean(),
+    status: v.union(
+      v.literal("discovered"),
+      v.literal("importing"),
+      v.literal("imported"),
+      v.literal("failed"),
+      v.literal("cleaned"),
+      v.literal("ready"),
+    ),
+    hasApprovedCleanup: v.boolean(),
+    requiredActions: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const book = await ctx.db.get(args.bookId);
+    if (!book) {
+      throw new Error(`Book ${args.bookId} not found`);
+    }
+
+    const requiredActions: string[] = [];
+
+    // Check if book has approved cleanup (status "ready")
+    const hasApprovedCleanup = book.status === "ready";
+
+    if (!hasApprovedCleanup) {
+      if (book.status === "cleaned") {
+        requiredActions.push("Review and approve cleanup in the review page");
+      } else if (book.status === "imported" || book.status === "discovered") {
+        requiredActions.push("Run cleanup process first");
+      } else if (book.status === "failed") {
+        requiredActions.push("Fix import errors and re-import");
+      }
+    }
+
+    // Check if book has content
+    const revisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .take(1);
+
+    if (revisions.length === 0) {
+      requiredActions.push("Wait for cleanup to complete");
+    }
+
+    return {
+      isReady: hasApprovedCleanup && revisions.length > 0,
+      status: book.status,
+      hasApprovedCleanup,
+      requiredActions,
+    };
+  },
+});
+
+/**
+ * List books that are ready for template/export (approved cleanup)
+ */
+export const listReadyBooks = query({
+  args: {
+    search: v.optional(v.string()),
+  },
+  returns: v.array(v.any()),
+  handler: async (ctx, args) => {
+    let books = await ctx.db
+      .query("books")
+      .filter(q => q.eq(q.field("status"), "ready"))
+      .order("desc")
+      .collect();
+
+    if (args.search) {
+      const searchLower = args.search.toLowerCase();
+      books = books.filter(
+        (book) =>
+          book.title.toLowerCase().includes(searchLower) ||
+          book.author.toLowerCase().includes(searchLower),
+      );
+    }
+
+    return books;
+  },
+});

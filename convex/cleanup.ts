@@ -393,22 +393,39 @@ export const promoteBoundaryToChapter: ReturnType<typeof mutation> = mutation({
 /**
  * Save a new cleaned revision from reviewer edits
  * Creates a new revision with user as the creator
+ * 
+ * POST-APPROVAL EDIT HANDLING:
+ * If the book has an active approval and keepApproval is not specified,
+   the caller must prompt for keep/revoke choice. If keepApproval is true,
+   the new revision becomes the approved revision. If keepApproval is false
+ * or unspecified with existing approval, approval is revoked.
  */
 export const saveCleanedRevision = mutation({
   args: {
     bookId: v.id("books"),
     content: v.string(),
     parentRevisionId: v.optional(v.id("cleanupRevisions")),
+    keepApproval: v.optional(v.boolean()),
   },
   returns: v.object({
     revisionId: v.id("cleanupRevisions"),
     revisionNumber: v.number(),
+    approvalRevoked: v.boolean(),
+    approvalKept: v.boolean(),
   }),
   handler: async (ctx, args) => {
     // Get current user
     const user = await ctx.auth.getUserIdentity();
     if (!user) {
       throw new Error("Must be authenticated to save revisions");
+    }
+
+    const userRecord = await ctx.db.query("users")
+      .withIndex("email", q => q.eq("email", user.email))
+      .first();
+
+    if (!userRecord) {
+      throw new Error("User not found");
     }
 
     // Verify book exists
@@ -431,6 +448,31 @@ export const saveCleanedRevision = mutation({
     const isAiAssisted = latestRevision?.isAiAssisted ?? false;
     const preserveArchaic = latestRevision?.preserveArchaic ?? true;
 
+    // Check if there's an active approval
+    const approvals = await ctx.db
+      .query("cleanupApprovals")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .order("desc")
+      .take(1);
+
+    const latestApproval = approvals[0];
+    const hasActiveApproval = latestApproval !== undefined;
+
+    // Determine approval action
+    let approvalRevoked = false;
+    let approvalKept = false;
+
+    if (hasActiveApproval) {
+      if (args.keepApproval === true) {
+        // User chose to keep approval - new revision becomes approved
+        approvalKept = true;
+      } else {
+        // No keep specified, or explicitly revoked - revoke approval
+        await ctx.db.patch(args.bookId, { status: "cleaned" });
+        approvalRevoked = true;
+      }
+    }
+
     // Create new revision
     const revisionId = await ctx.db.insert("cleanupRevisions", {
       bookId: args.bookId,
@@ -444,9 +486,25 @@ export const saveCleanedRevision = mutation({
       parentRevisionId: args.parentRevisionId ?? latestRevision?._id,
     });
 
+    // If keeping approval, create new approval record for this revision
+    if (approvalKept && latestApproval) {
+      await ctx.db.insert("cleanupApprovals", {
+        bookId: args.bookId,
+        revisionId,
+        approvedBy: userRecord._id,
+        approvedAt: Date.now(),
+        checklistConfirmed: latestApproval.checklistConfirmed,
+      });
+
+      // Update book status back to ready
+      await ctx.db.patch(args.bookId, { status: "ready" });
+    }
+
     return {
       revisionId,
       revisionNumber: newRevisionNumber,
+      approvalRevoked,
+      approvalKept,
     };
   },
 });
@@ -760,6 +818,70 @@ export const approveRevision = mutation({
     return {
       success: true,
       approvedRevisionId: args.revisionId,
+    };
+  },
+});
+
+/**
+ * Get approval state for a book
+ * Returns current approval status with revision awareness
+ */
+export const getApprovalState = query({
+  args: {
+    bookId: v.id("books"),
+  },
+  returns: v.object({
+    isApproved: v.boolean(),
+    approvedRevisionId: v.optional(v.id("cleanupRevisions")),
+    approvedRevisionNumber: v.optional(v.number()),
+    approvedAt: v.optional(v.number()),
+    approvedBy: v.optional(v.id("users")),
+    checklistConfirmed: v.optional(v.any()),
+    currentRevisionId: v.optional(v.id("cleanupRevisions")),
+    currentRevisionNumber: v.optional(v.number()),
+    approvalValid: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    // Get latest revision
+    const revisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id_revision", q => q.eq("bookId", args.bookId))
+      .order("desc")
+      .take(1);
+
+    const latestRevision = revisions[0];
+
+    // Get latest approval
+    const approvals = await ctx.db
+      .query("cleanupApprovals")
+      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .order("desc")
+      .take(1);
+
+    const latestApproval = approvals[0];
+
+    if (!latestApproval) {
+      return {
+        isApproved: false,
+        approvalValid: false,
+        currentRevisionId: latestRevision?._id,
+        currentRevisionNumber: latestRevision?.revisionNumber,
+      };
+    }
+
+    // Approval is valid only if it matches the latest revision
+    const approvalValid = latestApproval.revisionId === latestRevision?._id;
+
+    return {
+      isApproved: true,
+      approvedRevisionId: latestApproval.revisionId,
+      approvedRevisionNumber: latestRevision?.revisionNumber,
+      approvedAt: latestApproval.approvedAt,
+      approvedBy: latestApproval.approvedBy,
+      checklistConfirmed: latestApproval.checklistConfirmed,
+      currentRevisionId: latestRevision?._id,
+      currentRevisionNumber: latestRevision?.revisionNumber,
+      approvalValid,
     };
   },
 });
