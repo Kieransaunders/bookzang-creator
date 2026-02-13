@@ -1,12 +1,14 @@
-# Kimi First-Pass Ambiguity Auto-Resolution Implementation Plan
+# OpenRouter First-Pass Ambiguity Auto-Resolution Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Let Kimi resolve ambiguity first, automatically applying confident fixes by ambiguity type, and escalate only low-confidence leftovers to reviewer flags.
+**Goal:** Let OpenRouter resolve ambiguity first, automatically applying confident fixes by ambiguity type, escalating only low-confidence leftovers to reviewer flags, and showing operators which model actually handled each run.
 
-**Architecture:** Add a per-ambiguity confidence policy in backend config, route AI/deterministic ambiguity outputs through a shared decision engine, and persist an auditable trail of auto-applied actions. Existing approval gating remains intact, but unresolved flags should now represent only below-threshold ambiguity. UI should show what Kimi auto-resolved so users trust the system and focus on edge cases.
+**Architecture:** Add a per-ambiguity confidence policy in backend config, route OpenRouter/deterministic ambiguity outputs through a shared decision engine, and persist an auditable trail of auto-applied actions. Existing approval gating remains intact, but unresolved flags should now represent only below-threshold ambiguity. UI should show what OpenRouter auto-resolved and which model was used so users trust the system and focus on edge cases. OpenRouter Chat Completions becomes the AI transport layer with model fallback (`selectedModel` -> `deepseek/deepseek-v3.2`) and strict chunked prompting to stay below context limits.
 
-**Tech Stack:** Convex (queries/mutations/actions), TypeScript, Zod, React, existing cleanup pipeline and flags system
+**Tech Stack:** Convex (queries/mutations/actions), TypeScript, Zod, React, OpenRouter Chat Completions API, existing cleanup pipeline and flags system
+
+**Runtime constraints:** Assume effective context budget of 160K tokens for the selected model family; never send full-book text to AI calls. Use bounded chunk windows and iterative pass processing.
 
 ---
 
@@ -127,11 +129,24 @@ git commit -m "feat(cleanup): add per-ambiguity confidence decision policy"
 - Modify: `convex/cleanupAiClient.ts`
 - Test: `convex/__tests__/cleanupDecisionPolicy.test.ts`
 
+**Transport + model requirement:**
+
+- Use OpenRouter API for cleanup AI calls.
+- Use `openrouter/free` as the model for test runs in this plan.
+- Add fallback order for runtime calls: `selectedModel` -> `deepseek/deepseek-v3.2`.
+- Persist `requestedModel`, `resolvedModel`, and `fallbackUsed` in run metadata for observability.
+
 **Step 1: Write failing tests for confidence normalization**
 
 ```ts
 test("normalizes high/low labels to numeric confidence", () => {
   // "high" -> 0.9, "low" -> 0.55 (initial mapping)
+});
+
+test("falls back to deepseek model when selected model fails", async () => {
+  // selected model returns provider/model error
+  // expect retry with "deepseek/deepseek-v3.2"
+  // expect metadata fallbackUsed=true
 });
 ```
 
@@ -145,6 +160,10 @@ Expected: FAIL until normalization helper exists.
 ```ts
 // Add optional numeric confidenceScore: z.number().min(0).max(1).optional()
 // Derive effectiveConfidence for policy decisions.
+// Route calls through OpenRouter Chat Completions.
+// Add model selection so tests explicitly run with "openrouter/free".
+// Retry once with fallback model "deepseek/deepseek-v3.2" on model/provider failure.
+// Capture requestedModel/resolvedModel/fallbackUsed in return payload.
 ```
 
 **Step 4: Run tests to verify pass**
@@ -251,19 +270,25 @@ git add convex/cleanupPipeline.ts convex/cleanupFlags.ts convex/cleanup.ts conve
 git commit -m "feat(cleanup): apply confidence policy to deterministic ambiguity routing"
 ```
 
-### Task 6: Route Kimi ambiguity patches through same policy
+### Task 6: Route OpenRouter ambiguity patches through same policy
 
 **Files:**
 
 - Modify: `convex/cleanupAiClient.ts`
 - Modify: `convex/cleanup.ts`
 - Modify: `convex/cleanupFlags.ts`
+- Modify: `convex/schema.ts`
 
 **Step 1: Write failing tests for AI patch routing**
 
 ```ts
 test("ai high-confidence ambiguity auto-applies and logs", () => {
   // assert action path = auto_apply with audit insert
+});
+
+test("cleanup ai request is chunked and does not exceed configured window", () => {
+  // long source text produces multiple OpenRouter calls with bounded chunk size
+  // each call includes overlap window and chunk index metadata
 });
 ```
 
@@ -279,6 +304,8 @@ Expected: FAIL before AI path integrates policy calls.
 // apply patch if auto_apply
 // create unresolved flag if manual_review
 // write audit record for auto_apply
+// Build chunk plan: fixed max chars/tokens + overlap; process sequentially.
+// Persist per-run model metadata and chunk stats.
 ```
 
 **Step 4: Run tests/typecheck/build**
@@ -290,7 +317,7 @@ Expected: PASS.
 
 ```bash
 git add convex/cleanupAiClient.ts convex/cleanup.ts convex/cleanupFlags.ts convex/__tests__/cleanupDecisionPolicy.test.ts
-git commit -m "feat(cleanup): apply confidence policy to kimi ambiguity handling"
+git commit -m "feat(cleanup): add openrouter fallback and chunked ambiguity routing"
 ```
 
 ### Task 7: Expose policy and auto-resolution summary to review UI
@@ -300,12 +327,17 @@ git commit -m "feat(cleanup): apply confidence policy to kimi ambiguity handling
 - Modify: `convex/cleanup.ts`
 - Modify: `src/components/CleanupReviewPage.tsx`
 - Modify: `src/components/CleanupFlagsPanel.tsx`
+- Modify: `src/components/CleanupRunPanel.tsx` (or equivalent run status component)
 
 **Step 1: Write failing UI contract test (or shape assertion test)**
 
 ```ts
 test("review data includes autoResolved counts by type", () => {
   // expect getReviewData payload to include autoResolvedSummary
+});
+
+test("review data includes requested/resolved model and fallback status", () => {
+  // expect model telemetry fields for each cleanup run
 });
 ```
 
@@ -318,7 +350,9 @@ Expected: FAIL because payload currently omits auto-resolution summary.
 
 ```ts
 // getReviewData returns autoResolvedSummary
-// CleanupFlagsPanel displays "Kimi auto-resolved N items" with by-type breakdown
+// CleanupFlagsPanel displays "OpenRouter auto-resolved N items" with by-type breakdown
+// Review UI displays "Model used: <resolvedModel>" and "fallback activated" when applicable.
+// Add optional model text input for advanced users, with validation and helper text.
 ```
 
 **Step 4: Run verification**
@@ -330,7 +364,7 @@ Expected: PASS + frontend compiles.
 
 ```bash
 git add convex/cleanup.ts src/components/CleanupReviewPage.tsx src/components/CleanupFlagsPanel.tsx
-git commit -m "feat(review): surface kimi auto-resolved ambiguity summary"
+git commit -m "feat(review): surface model telemetry and optional model override input"
 ```
 
 ### Task 8: Add runtime-configurable per-type thresholds
@@ -382,12 +416,12 @@ git add convex/cleanupPolicy.ts convex/schema.ts convex/cleanup.ts convex/__test
 git commit -m "feat(cleanup): add configurable per-ambiguity thresholds"
 ```
 
-### Task 9: End-to-end verification for “Kimi first, user second” flow
+### Task 9: End-to-end verification for “OpenRouter first, user second” flow
 
 **Files:**
 
 - Modify: `Project docs/ideas.md` (or create execution notes)
-- Optional Create: `docs/plans/2026-02-12-kimi-first-pass-ambiguity-autoresolution-verification.md`
+- Optional Create: `docs/plans/2026-02-12-openrouter-first-pass-ambiguity-autoresolution-verification.md`
 
 **Step 1: Write failing verification checklist**
 
@@ -396,6 +430,8 @@ git commit -m "feat(cleanup): add configurable per-ambiguity thresholds"
 - Confirm high-confidence ambiguity does not appear in unresolved flags
 - Confirm below-threshold ambiguity appears in unresolved flags
 - Confirm auto-resolution records exist and are reviewable
+- Confirm model banner shows resolved model and fallback state when triggered
+- Confirm long-book cleanup runs in bounded chunks (no oversized single request)
 ```
 
 **Step 2: Run flow and capture evidence**
@@ -417,8 +453,8 @@ Include thresholds used, unresolved flag delta before/after, and rollback notes.
 **Step 5: Commit**
 
 ```bash
-git add docs/plans/2026-02-12-kimi-first-pass-ambiguity-autoresolution-verification.md Project\ docs/ideas.md
-git commit -m "docs(cleanup): verify kimi-first ambiguity auto-resolution behavior"
+git add docs/plans/2026-02-12-openrouter-first-pass-ambiguity-autoresolution-verification.md Project\ docs/ideas.md
+git commit -m "docs(cleanup): verify openrouter-first ambiguity auto-resolution behavior"
 ```
 
 ## Phase 2 hard exit note (stability gate)
@@ -427,20 +463,24 @@ Phase 2 is only considered complete when all four gates below are met and docume
 
 ### Gate criteria
 
-- `Policy correctness`: Per-ambiguity threshold routing is active in both deterministic and Kimi ambiguity paths.
+- `Policy correctness`: Per-ambiguity threshold routing is active in both deterministic and OpenRouter ambiguity paths.
+- `Model resilience`: Failed selected model retries through `deepseek/deepseek-v3.2` and reports resolved model.
 - `Stability`: No regression in unresolved-flag generation for below-threshold ambiguity; no silent drops in review payload.
 - `Auditability`: Every auto-applied ambiguity writes an auditable record (`beforeText`, `afterText`, `confidence`, `thresholdUsed`, `rationale`, `createdAt`).
-- `Operational readiness`: `npm run test:cleanup-policy` and `npm run lint` pass on the same commit.
+- `Context safety`: AI cleanup uses chunked requests only; no full-book payload sent.
+- `Operational readiness`: `npm run test:cleanup-policy` (with `openrouter/free`) and `npm run lint` pass on the same commit.
 
 ### Required evidence block (must be filled at exit)
 
 - Commit SHA for Phase 2 exit candidate.
-- Test evidence: command + pass output for `npm run test:cleanup-policy`.
+- Test evidence: command + pass output for `npm run test:cleanup-policy` using OpenRouter test model `openrouter/free`.
 - Repo health evidence: command + pass output for `npm run lint`.
 - Behavior evidence from one representative title:
+  - requested model, resolved model, and fallbackUsed value,
   - count of auto-resolved ambiguities by type,
   - count of unresolved flags by type (below threshold),
-  - at least one stored audit record excerpt.
+  - at least one stored audit record excerpt,
+  - chunk count and max chunk size used by AI pass.
 - Risk callout: known limitations intentionally deferred to Phase 3.
 
 If any gate fails or evidence is missing, Phase 2 remains `in_progress` and hardening continues.

@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as books from "../books.js";
+import type * as chunkPlanner from "../chunkPlanner.js";
 import type * as cleanup from "../cleanup.js";
 import type * as cleanupAi from "../cleanupAi.js";
 import type * as cleanupAiClient from "../cleanupAiClient.js";
@@ -29,6 +30,7 @@ import type * as intake from "../intake.js";
 import type * as intakeMetadata from "../intakeMetadata.js";
 import type * as jobStages from "../jobStages.js";
 import type * as jobs from "../jobs.js";
+import type * as openrouterRouting from "../openrouterRouting.js";
 import type * as router from "../router.js";
 import type * as templates from "../templates.js";
 
@@ -41,6 +43,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   books: typeof books;
+  chunkPlanner: typeof chunkPlanner;
   cleanup: typeof cleanup;
   cleanupAi: typeof cleanupAi;
   cleanupAiClient: typeof cleanupAiClient;
@@ -60,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   intakeMetadata: typeof intakeMetadata;
   jobStages: typeof jobStages;
   jobs: typeof jobs;
+  openrouterRouting: typeof openrouterRouting;
   router: typeof router;
   templates: typeof templates;
 }>;
