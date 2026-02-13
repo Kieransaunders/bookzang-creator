@@ -53,6 +53,7 @@ export const createFromFile = mutation({
     fileName: v.string(),
     gutenbergId: v.optional(v.string()),
     overrideDuplicate: v.optional(v.boolean()),
+    ingestMode: v.optional(v.union(v.literal("quality"), v.literal("fast"))),
   },
   handler: async (ctx: any, args): Promise<any> => {
     return await ctx.runMutation((api as any).intake.enqueueUpload, {
@@ -62,6 +63,7 @@ export const createFromFile = mutation({
       title: args.title,
       author: args.author,
       overrideDuplicate: args.overrideDuplicate,
+      ingestMode: args.ingestMode,
     });
   },
 });

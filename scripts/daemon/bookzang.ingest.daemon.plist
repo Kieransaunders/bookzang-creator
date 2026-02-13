@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bookzang.ingest.daemon</string>
+
+  <key>WorkingDirectory</key>
+  <string>__WORKDIR__</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>npm</string>
+    <string>run</string>
+    <string>daemon:ingest</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LIBRARY_ROOT</key>
+    <string>__LIBRARY_ROOT__</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/bookzang-ingest.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/bookzang-ingest.err.log</string>
+</dict>
+</plist>
