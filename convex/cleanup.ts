@@ -668,6 +668,20 @@ export const createRevisionRecord = internalMutation({
     preserveArchaic: v.boolean(),
     createdBy: v.union(v.literal("system"), v.literal("ai"), v.literal("user")),
     parentRevisionId: v.optional(v.id("cleanupRevisions")),
+    // AI telemetry fields (optional)
+    telemetry: v.optional(
+      v.object({
+        requestedModel: v.optional(v.string()),
+        resolvedModel: v.optional(v.string()),
+        fallbackUsed: v.optional(v.boolean()),
+        chunkCount: v.optional(v.number()),
+        maxChunkChars: v.optional(v.number()),
+        overlapChars: v.optional(v.number()),
+        totalInputChars: v.optional(v.number()),
+        processingStartedAt: v.optional(v.number()),
+        processingCompletedAt: v.optional(v.number()),
+      }),
+    ),
   },
   returns: v.id("cleanupRevisions"),
   handler: async (ctx, args) => {
@@ -682,6 +696,16 @@ export const createRevisionRecord = internalMutation({
       createdAt: Date.now(),
       createdBy: args.createdBy,
       parentRevisionId: args.parentRevisionId,
+      // Telemetry fields
+      aiRequestedModel: args.telemetry?.requestedModel,
+      aiResolvedModel: args.telemetry?.resolvedModel,
+      aiFallbackUsed: args.telemetry?.fallbackUsed,
+      aiChunkCount: args.telemetry?.chunkCount,
+      aiMaxChunkChars: args.telemetry?.maxChunkChars,
+      aiOverlapChars: args.telemetry?.overlapChars,
+      aiTotalInputChars: args.telemetry?.totalInputChars,
+      aiProcessingStartedAt: args.telemetry?.processingStartedAt,
+      aiProcessingCompletedAt: args.telemetry?.processingCompletedAt,
     });
   },
 });

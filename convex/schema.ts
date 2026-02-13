@@ -155,6 +155,16 @@ const applicationTables = {
     chapterIds: v.optional(v.array(v.id("cleanupChapters"))), // References to chapter records
     // DEPRECATED: content stored directly (removed due to 1MB limit)
     content: v.optional(v.string()),
+    // AI Processing telemetry (Task 4: model telemetry and chunk stats)
+    aiRequestedModel: v.optional(v.string()),
+    aiResolvedModel: v.optional(v.string()),
+    aiFallbackUsed: v.optional(v.boolean()),
+    aiChunkCount: v.optional(v.number()),
+    aiMaxChunkChars: v.optional(v.number()),
+    aiOverlapChars: v.optional(v.number()),
+    aiTotalInputChars: v.optional(v.number()),
+    aiProcessingStartedAt: v.optional(v.number()),
+    aiProcessingCompletedAt: v.optional(v.number()),
   })
     .index("by_book_id", ["bookId"])
     .index("by_book_id_revision", ["bookId", "revisionNumber"]),

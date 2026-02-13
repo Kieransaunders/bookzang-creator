@@ -21,6 +21,7 @@ import type * as cleanupFlags from "../cleanupFlags.js";
 import type * as cleanupPatchApply from "../cleanupPatchApply.js";
 import type * as cleanupPipeline from "../cleanupPipeline.js";
 import type * as cleanupPrompts from "../cleanupPrompts.js";
+import type * as cleanupTelemetry from "../cleanupTelemetry.js";
 import type * as copyrightAi from "../copyrightAi.js";
 import type * as copyrightParser from "../copyrightParser.js";
 import type * as files from "../files.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   cleanupPatchApply: typeof cleanupPatchApply;
   cleanupPipeline: typeof cleanupPipeline;
   cleanupPrompts: typeof cleanupPrompts;
+  cleanupTelemetry: typeof cleanupTelemetry;
   copyrightAi: typeof copyrightAi;
   copyrightParser: typeof copyrightParser;
   files: typeof files;
