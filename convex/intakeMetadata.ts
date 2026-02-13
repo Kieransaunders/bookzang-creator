@@ -148,6 +148,7 @@ export const markCompleted = internalMutation({
       title: args.title,
       author: args.author,
       status: "imported",
+      copyrightStatus: "checking",
       lastError: undefined,
     });
 
@@ -167,6 +168,12 @@ export const markCompleted = internalMutation({
         error: undefined,
       });
     }
+
+    // Schedule copyright research after successful import
+    await ctx.scheduler.runAfter(0, internal.copyrightAi.researchCopyright, {
+      bookId: args.bookId,
+      triggerSource: "intake",
+    });
   },
 });
 

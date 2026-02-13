@@ -18,6 +18,15 @@ const applicationTables = {
       v.literal("cleaned"),
       v.literal("ready"),
     ),
+    copyrightStatus: v.optional(
+      v.union(
+        v.literal("unknown"),
+        v.literal("checking"),
+        v.literal("cleared"),
+        v.literal("flagged"),
+        v.literal("blocked"),
+      ),
+    ),
     templateId: v.optional(v.id("templates")),
     importedAt: v.number(),
     fileId: v.optional(v.id("_storage")),
@@ -184,6 +193,28 @@ const applicationTables = {
     .index("by_book_status", ["bookId", "status"])
     .index("by_status", ["status"]),
 
+  cleanupAutoResolutions: defineTable({
+    bookId: v.id("books"),
+    revisionId: v.id("cleanupRevisions"),
+    flagType: v.union(
+      v.literal("unlabeled_boundary_candidate"),
+      v.literal("low_confidence_cleanup"),
+      v.literal("ocr_corruption_detected"),
+      v.literal("ambiguous_punctuation"),
+      v.literal("chapter_boundary_disputed"),
+    ),
+    startOffset: v.number(),
+    endOffset: v.number(),
+    beforeText: v.string(),
+    afterText: v.string(),
+    confidence: v.number(),
+    thresholdUsed: v.number(),
+    rationale: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_book_id", ["bookId"])
+    .index("by_revision_id", ["revisionId"]),
+
   // Cleanup jobs for tracking pipeline progress
   cleanupJobs: defineTable({
     bookId: v.id("books"),
@@ -223,6 +254,72 @@ const applicationTables = {
     .index("by_book_id", ["bookId"])
     .index("by_revision_id", ["revisionId"])
     .index("by_book_revision", ["bookId", "revisionId"]),
+
+  // Copyright research results and audit trail
+  copyrightChecks: defineTable({
+    bookId: v.id("books"),
+    status: v.union(
+      v.literal("unknown"),
+      v.literal("checking"),
+      v.literal("cleared"),
+      v.literal("flagged"),
+      v.literal("blocked"),
+    ),
+    contributors: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          role: v.string(),
+          deathYear: v.optional(v.number()),
+          confidence: v.string(),
+          source: v.string(),
+          notes: v.optional(v.string()),
+        }),
+      ),
+    ),
+    assessment: v.optional(
+      v.object({
+        reason: v.string(),
+        latestDeathYear: v.optional(v.number()),
+        yearsSinceDeath: v.optional(v.number()),
+      }),
+    ),
+    headerAnalysis: v.optional(
+      v.object({
+        scanned: v.boolean(),
+        permissionNotes: v.optional(v.string()),
+        warningFlags: v.array(v.string()),
+        headerPreview: v.optional(v.string()),
+      }),
+    ),
+    metadata: v.optional(
+      v.object({
+        researchDate: v.string(),
+        gutenbergId: v.optional(v.string()),
+        title: v.string(),
+        triggerSource: v.optional(v.string()),
+      }),
+    ),
+    aiAssisted: v.boolean(),
+    manualOverride: v.optional(v.boolean()),
+    clearedBy: v.optional(v.id("users")),
+    clearedAt: v.optional(v.number()),
+    manualReason: v.optional(v.string()),
+    manualContributors: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          role: v.string(),
+          deathYear: v.number(),
+        }),
+      ),
+    ),
+    error: v.optional(v.string()),
+    researchedAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_book_id", ["bookId"])
+    .index("by_status", ["status"]),
 };
 
 export default defineSchema({
