@@ -24,6 +24,7 @@ import type * as copyrightAi from "../copyrightAi.js";
 import type * as copyrightParser from "../copyrightParser.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as ingestJobs from "../ingestJobs.js";
 import type * as intake from "../intake.js";
 import type * as intakeMetadata from "../intakeMetadata.js";
 import type * as jobStages from "../jobStages.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   copyrightParser: typeof copyrightParser;
   files: typeof files;
   http: typeof http;
+  ingestJobs: typeof ingestJobs;
   intake: typeof intake;
   intakeMetadata: typeof intakeMetadata;
   jobStages: typeof jobStages;

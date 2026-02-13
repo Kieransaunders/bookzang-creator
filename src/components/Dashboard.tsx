@@ -3,15 +3,23 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
-import { Library, Briefcase, FileText, Plus, Sparkles } from "lucide-react";
+import {
+  Library,
+  Briefcase,
+  FileText,
+  Plus,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import { LibraryPage } from "./LibraryPage";
 import { JobsPage } from "./JobsPage";
 import { TemplatesPage } from "./TemplatesPage";
 import { ImportModal } from "./ImportModal";
 import { CleanupReviewPage } from "./CleanupReviewPage";
+import { IngestErrorLogsPage } from "./IngestErrorLogsPage";
 import { SignOutButton } from "../SignOutButton";
 
-type Page = "library" | "jobs" | "templates" | "cleanup-review";
+type Page = "library" | "jobs" | "templates" | "error-logs" | "cleanup-review";
 
 export function Dashboard() {
   const [currentPage, setCurrentPage] = useState<Page>("library");
@@ -33,12 +41,15 @@ export function Dashboard() {
     { id: "library" as const, label: "Library", icon: Library },
     { id: "jobs" as const, label: "Jobs", icon: Briefcase },
     { id: "templates" as const, label: "Templates", icon: FileText },
+    { id: "error-logs" as const, label: "Error Logs", icon: TriangleAlert },
   ];
 
   const pageTitle = {
     library: "Library Intake",
     jobs: "Job Queue",
     templates: "PDF Templates",
+    "error-logs": "Ingest Error Logs",
+    "cleanup-review": "Cleanup Review",
   }[currentPage];
 
   const showPrimaryButton = currentPage === "library";
@@ -79,11 +90,13 @@ export function Dashboard() {
                       : "text-white/80 hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <Icon 
-                    size={20} 
+                  <Icon
+                    size={20}
                     className={`transition-colors ${
-                      isActive ? "text-indigo-300" : "text-white/70 group-hover:text-white/80"
-                    }`} 
+                      isActive
+                        ? "text-indigo-300"
+                        : "text-white/70 group-hover:text-white/80"
+                    }`}
                   />
                   <span className="font-medium">{item.label}</span>
                   {isActive && (
@@ -109,9 +122,14 @@ export function Dashboard() {
             <div>
               <h2 className="text-xl font-semibold text-white">{pageTitle}</h2>
               <p className="text-sm text-white/70 mt-0.5">
-                {currentPage === "library" && "Import and manage your book collection"}
-                {currentPage === "jobs" && "Track import, cleaning, and export progress"}
-                {currentPage === "templates" && "Choose formatting for PDF generation"}
+                {currentPage === "library" &&
+                  "Import and manage your book collection"}
+                {currentPage === "jobs" &&
+                  "Track import, cleaning, and export progress"}
+                {currentPage === "templates" &&
+                  "Choose formatting for PDF generation"}
+                {currentPage === "error-logs" &&
+                  "Review daemon-reported failures and warning events"}
               </p>
             </div>
             {showPrimaryButton && (
@@ -132,8 +150,12 @@ export function Dashboard() {
             )}
             {currentPage === "jobs" && <JobsPage />}
             {currentPage === "templates" && <TemplatesPage />}
+            {currentPage === "error-logs" && <IngestErrorLogsPage />}
             {currentPage === "cleanup-review" && reviewBookId && (
-              <CleanupReviewPage bookId={reviewBookId} onExit={handleExitReview} />
+              <CleanupReviewPage
+                bookId={reviewBookId}
+                onExit={handleExitReview}
+              />
             )}
           </div>
         </div>

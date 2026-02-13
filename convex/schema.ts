@@ -86,6 +86,33 @@ const applicationTables = {
     .index("by_book_id", ["bookId"])
     .index("by_gutenberg_id", ["gutenbergId"]),
 
+  ingestJobs: defineTable({
+    bookId: v.id("books"),
+    gutenbergId: v.string(),
+    mode: v.union(v.literal("quality"), v.literal("fast")),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("leased"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    leaseOwner: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    stage: v.optional(v.string()),
+    selectedFormat: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    localSourcePath: v.optional(v.string()),
+    localExtractedPath: v.optional(v.string()),
+    checksum: v.optional(v.string()),
+    warning: v.optional(v.string()),
+    error: v.optional(v.string()),
+    queuedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_book_id", ["bookId"])
+    .index("by_gutenberg_id", ["gutenbergId"]),
+
   templates: defineTable({
     name: v.string(),
     description: v.string(),
@@ -290,13 +317,14 @@ const applicationTables = {
         permissionNotes: v.optional(v.string()),
         warningFlags: v.array(v.string()),
         headerPreview: v.optional(v.string()),
+        publicationYear: v.optional(v.number()),
       }),
     ),
     metadata: v.optional(
       v.object({
         researchDate: v.string(),
         gutenbergId: v.optional(v.string()),
-        title: v.string(),
+        title: v.optional(v.string()),
         triggerSource: v.optional(v.string()),
       }),
     ),
