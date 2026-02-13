@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-import { X, Clock, Play, CheckCircle, XCircle } from "lucide-react";
+import { X, Clock, Play, CheckCircle, XCircle, ExternalLink } from "lucide-react";
 import { Id } from "../../convex/_generated/dataModel";
 import {
   getJobStageLabel,
@@ -80,7 +80,15 @@ export function JobDetailsDrawer({ jobId, onClose }: JobDetailsDrawerProps) {
               <label className="text-sm font-medium text-slate-300">
                 Gutenberg ID
               </label>
-              <span className="text-white">#{job.gutenbergId}</span>
+              <a
+                href={`https://www.gutenberg.org/ebooks/${job.gutenbergId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+              >
+                #{job.gutenbergId}
+                <ExternalLink size={12} />
+              </a>
             </div>
           )}
 

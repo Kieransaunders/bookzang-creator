@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Trash2,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 
 interface LibraryPageProps {
@@ -144,11 +145,29 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
     return <Download size={14} className="text-blue-400" />;
   };
 
-  const getSourceText = (book: any) => {
+  const getSourceDisplay = (book: any) => {
     if (book.fileId) {
-      return `Uploaded: ${book.fileName || "Unknown file"}`;
+      return (
+        <span className="line-clamp-1 text-xs">
+          Uploaded: {book.fileName || "Unknown file"}
+        </span>
+      );
     }
-    return `Gutenberg #${book.gutenbergId}`;
+    if (book.gutenbergId) {
+      return (
+        <a
+          href={`https://www.gutenberg.org/ebooks/${book.gutenbergId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Gutenberg #{book.gutenbergId}
+          <ExternalLink size={10} />
+        </a>
+      );
+    }
+    return <span className="line-clamp-1 text-xs">Unknown source</span>;
   };
 
   const handleStartCleanup = async (bookId: Id<"books">, bookTitle: string) => {
@@ -311,9 +330,7 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
 
                     <div className="flex items-center gap-2.5 text-white/80">
                       {getSourceIcon(book)}
-                      <span className="line-clamp-1 text-xs">
-                        {getSourceText(book)}
-                      </span>
+                      {getSourceDisplay(book)}
                     </div>
 
                     <div className="flex items-center gap-2.5 text-white/70">
