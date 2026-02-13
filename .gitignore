@@ -27,3 +27,6 @@ dist-ssr
 package-lock.json
 # Library content (book files)
 Library/
+
+# Local git worktrees
+.worktrees/

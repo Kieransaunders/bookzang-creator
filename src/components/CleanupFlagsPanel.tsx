@@ -1,12 +1,12 @@
 /**
  * CleanupFlagsPanel - Unresolved flag list with resolution actions
- * 
+ *
  * Displays cleanup flags that require reviewer attention:
  * - Low-confidence cleanup suggestions
  * - Unlabeled boundary candidates
  * - OCR corruption detections
  * - Ambiguous punctuation
- * 
+ *
  * Provides resolution controls for each flag type.
  */
 
@@ -29,25 +29,28 @@ import {
   MessageSquare,
 } from "lucide-react";
 
+export interface CleanupReviewFlag {
+  _id: Id<"cleanupFlags">;
+  type:
+    | "unlabeled_boundary_candidate"
+    | "low_confidence_cleanup"
+    | "ocr_corruption_detected"
+    | "ambiguous_punctuation"
+    | "chapter_boundary_disputed";
+  status: "unresolved" | "confirmed" | "rejected" | "overridden";
+  contextText: string;
+  suggestedAction?: string;
+  reviewerNote?: string;
+  chapterId?: Id<"cleanupChapters">;
+  startOffset: number;
+  endOffset: number;
+}
+
 interface CleanupFlagsPanelProps {
   bookId: Id<"books">;
-  flags: Array<{
-    _id: Id<"cleanupFlags">;
-    type: 
-      | "unlabeled_boundary_candidate"
-      | "low_confidence_cleanup"
-      | "ocr_corruption_detected"
-      | "ambiguous_punctuation"
-      | "chapter_boundary_disputed";
-    status: "unresolved" | "confirmed" | "rejected" | "overridden";
-    contextText: string;
-    suggestedAction?: string;
-    reviewerNote?: string;
-    chapterId?: Id<"cleanupChapters">;
-    startOffset: number;
-    endOffset: number;
-  }>;
+  flags: CleanupReviewFlag[];
   canApprove: boolean;
+  onFocusFlag?: (flag: CleanupReviewFlag) => void;
 }
 
 type FlagType = CleanupFlagsPanelProps["flags"][0]["type"];
@@ -102,9 +105,11 @@ function getFlagTypeInfo(type: FlagType) {
 function FlagCard({
   flag,
   onResolved,
+  onFocusFlag,
 }: {
   flag: CleanupFlagsPanelProps["flags"][0];
   onResolved: () => void;
+  onFocusFlag?: (flag: CleanupReviewFlag) => void;
 }) {
   const resolveFlag = useMutation(api.cleanup.resolveFlag);
   const promoteBoundary = useMutation(api.cleanup.promoteBoundaryToChapter);
@@ -121,7 +126,7 @@ function FlagCard({
   const Icon = typeInfo.icon;
 
   const handleResolve = async (
-    status: "confirmed" | "rejected" | "overridden"
+    status: "confirmed" | "rejected" | "overridden",
   ) => {
     setIsResolving(true);
     setError(null);
@@ -154,7 +159,9 @@ function FlagCard({
       });
       onResolved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to promote boundary");
+      setError(
+        err instanceof Error ? err.message : "Failed to promote boundary",
+      );
     } finally {
       setIsResolving(false);
     }
@@ -179,7 +186,9 @@ function FlagCard({
             <span className="font-medium text-white text-sm">
               {typeInfo.label}
             </span>
-            <span className="text-xs text-slate-400">• {typeInfo.description}</span>
+            <span className="text-xs text-slate-400">
+              • {typeInfo.description}
+            </span>
           </div>
         </div>
         {isExpanded ? (
@@ -196,6 +205,14 @@ function FlagCard({
           <div className="p-3 bg-slate-900/50 rounded border border-white/5">
             <p className="text-xs text-slate-400 mb-1">Context:</p>
             <p className="text-sm text-slate-200 font-mono">{contextPreview}</p>
+            {onFocusFlag && (
+              <button
+                onClick={() => onFocusFlag(flag)}
+                className="mt-2 text-xs text-blue-300 hover:text-blue-200"
+              >
+                Jump to section
+              </button>
+            )}
           </div>
 
           {/* Suggested action */}
@@ -336,6 +353,7 @@ function FlagCard({
 export function CleanupFlagsPanel({
   flags,
   canApprove,
+  onFocusFlag,
 }: CleanupFlagsPanelProps) {
   const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(new Set());
 
@@ -379,6 +397,7 @@ export function CleanupFlagsPanel({
           key={flag._id}
           flag={flag}
           onResolved={() => handleFlagResolved(flag._id)}
+          onFocusFlag={onFocusFlag}
         />
       ))}
     </div>

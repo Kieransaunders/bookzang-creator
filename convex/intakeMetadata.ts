@@ -169,8 +169,8 @@ export const markCompleted = internalMutation({
       });
     }
 
-    // Schedule copyright research after successful import
-    await ctx.scheduler.runAfter(0, internal.copyrightAi.researchCopyright, {
+    // Schedule copyright analysis after successful import
+    await ctx.scheduler.runAfter(0, internal.copyrightAi.analyzeCopyright, {
       bookId: args.bookId,
       triggerSource: "intake",
     });

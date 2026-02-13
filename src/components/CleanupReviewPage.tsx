@@ -10,7 +10,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { CleanupMergeEditor } from "./CleanupMergeEditor";
-import { CleanupFlagsPanel } from "./CleanupFlagsPanel";
+import { CleanupFlagsPanel, type CleanupReviewFlag } from "./CleanupFlagsPanel";
 import { ApprovalChecklistDialog } from "./ApprovalChecklistDialog";
 
 import {
@@ -46,6 +46,7 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
   const approvalState = useQuery(api.cleanup.getApprovalState, { bookId });
   const saveRevision = useMutation(api.cleanup.saveCleanedRevision);
   const approveRevision = useMutation(api.cleanup.approveRevision);
+  const resolveFlag = useMutation(api.cleanup.resolveFlag);
 
   // Local state for editing
   const [editedText, setEditedText] = useState<string>("");
@@ -64,6 +65,19 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
   // Post-approval edit prompt state
   const [showPostApprovalPrompt, setShowPostApprovalPrompt] = useState(false);
   const [pendingSaveContent, setPendingSaveContent] = useState<string | null>(
+    null,
+  );
+  const [selectedFlag, setSelectedFlag] = useState<CleanupReviewFlag | null>(
+    null,
+  );
+  const [flagFocusRange, setFlagFocusRange] = useState<{
+    key: string;
+    startOffset: number;
+    endOffset: number;
+  } | null>(null);
+  const [inlineReviewerNote, setInlineReviewerNote] = useState("");
+  const [isResolvingInline, setIsResolvingInline] = useState(false);
+  const [inlineResolveError, setInlineResolveError] = useState<string | null>(
     null,
   );
 
@@ -115,6 +129,53 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
     setEditedText(text);
     setSaveError(null);
   }, []);
+
+  const handleFocusFlag = useCallback((flag: CleanupReviewFlag) => {
+    setSelectedFlag(flag);
+    setInlineReviewerNote(flag.reviewerNote || "");
+    setInlineResolveError(null);
+    setFlagFocusRange({
+      key: `${flag._id}-${Date.now()}`,
+      startOffset: flag.startOffset,
+      endOffset: flag.endOffset,
+    });
+  }, []);
+
+  const handleInlineResolve = useCallback(
+    async (status: "confirmed" | "rejected" | "overridden") => {
+      if (!selectedFlag) return;
+      setIsResolvingInline(true);
+      setInlineResolveError(null);
+      try {
+        await resolveFlag({
+          flagId: selectedFlag._id,
+          status,
+          reviewerNote: inlineReviewerNote || undefined,
+        });
+        setSelectedFlag(null);
+        setInlineReviewerNote("");
+      } catch (error) {
+        setInlineResolveError(
+          error instanceof Error ? error.message : "Failed to resolve flag",
+        );
+      } finally {
+        setIsResolvingInline(false);
+      }
+    },
+    [inlineReviewerNote, resolveFlag, selectedFlag],
+  );
+
+  useEffect(() => {
+    if (!selectedFlag || !reviewData?.unresolvedFlags) return;
+    const stillUnresolved = reviewData.unresolvedFlags.some(
+      (flag) => flag._id === selectedFlag._id,
+    );
+    if (!stillUnresolved) {
+      setSelectedFlag(null);
+      setInlineReviewerNote("");
+      setInlineResolveError(null);
+    }
+  }, [reviewData?.unresolvedFlags, selectedFlag]);
 
   // Check if save would trigger post-approval edit flow
   const checkPostApprovalSave = useCallback(() => {
@@ -380,11 +441,67 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
             </div>
           </div>
 
+          {selectedFlag && (
+            <div className="border-b border-white/10 bg-blue-500/10 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-blue-200">
+                  Reviewing flag:{" "}
+                  <span className="font-medium">{selectedFlag.type}</span>
+                </p>
+                <button
+                  onClick={() => setSelectedFlag(null)}
+                  className="text-xs text-slate-300 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+              <p className="text-xs text-slate-300 font-mono truncate">
+                {selectedFlag.contextText}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleInlineResolve("confirmed")}
+                  disabled={isResolvingInline}
+                  className="px-2.5 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded text-xs"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleInlineResolve("rejected")}
+                  disabled={isResolvingInline}
+                  className="px-2.5 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded text-xs"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => handleInlineResolve("overridden")}
+                  disabled={isResolvingInline}
+                  className="px-2.5 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 rounded text-xs"
+                >
+                  Override
+                </button>
+                <input
+                  type="text"
+                  value={inlineReviewerNote}
+                  onChange={(event) =>
+                    setInlineReviewerNote(event.target.value)
+                  }
+                  placeholder="Optional reviewer note..."
+                  className="min-w-60 flex-1 px-2.5 py-1.5 bg-slate-900/60 border border-white/10 rounded text-xs text-slate-100 placeholder-slate-500"
+                />
+              </div>
+              {inlineResolveError && (
+                <p className="text-xs text-red-300">{inlineResolveError}</p>
+              )}
+            </div>
+          )}
+
           {/* Merge editor */}
           <div className="flex-1 overflow-hidden">
             <CleanupMergeEditor
               originalText={originalText}
               cleanedText={cleanedText}
+              focusRange={flagFocusRange}
               onCleanedChange={handleCleanedChange}
               className="h-full"
             />
@@ -434,6 +551,7 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
                 bookId={bookId}
                 flags={unresolvedFlags}
                 canApprove={canApprove}
+                onFocusFlag={handleFocusFlag}
               />
             ) : (
               <div className="space-y-2">
@@ -522,12 +640,12 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
 
       {/* Post-Approval Edit Prompt Modal */}
       {showPostApprovalPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowPostApprovalPrompt(false)}
           />
-          <div className="relative w-full max-w-md liquid-glass-strong rounded-2xl shadow-2xl p-6">
+          <div className="relative my-4 w-full max-w-md overflow-y-auto liquid-glass-strong rounded-2xl shadow-2xl p-6 max-h-[calc(100dvh-2rem)]">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center">
                 <AlertCircle size={20} className="text-yellow-400" />

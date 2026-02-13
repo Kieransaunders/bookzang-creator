@@ -1,6 +1,6 @@
 /**
  * AI Cleanup Prompts and Schemas
- * 
+ *
  * Centralized prompt management and Zod schemas for structured AI responses.
  * All prompts enforce the preservation-first policy from CONTEXT.md.
  */
@@ -16,39 +16,108 @@ import { z } from "zod";
  */
 export const CleanupPatchSchema = z.object({
   start: z.number().int().min(0).describe("Character offset where edit starts"),
-  end: z.number().int().min(0).describe("Character offset where edit ends (exclusive)"),
-  original: z.string().describe("Original text being replaced (must match text[start:end])"),
+  end: z
+    .number()
+    .int()
+    .min(0)
+    .describe("Character offset where edit ends (exclusive)"),
+  original: z
+    .string()
+    .describe("Original text being replaced (must match text[start:end])"),
   replacement: z.string().describe("Proposed replacement text"),
-  confidence: z.enum(["high", "low"]).describe(
-    "Confidence level: 'high' for clear OCR errors, 'low' for uncertain or stylistic suggestions"
-  ),
+  confidence: z
+    .enum(["high", "low"])
+    .describe(
+      "Confidence level: 'high' for clear OCR errors, 'low' for uncertain or stylistic suggestions",
+    ),
+  confidenceScore: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe(
+      "Optional numeric confidence score in [0, 1]; when absent, use confidence label mapping",
+    ),
   reason: z.string().max(200).describe("Brief explanation for the edit"),
-  category: z.enum([
-    "ocr_error",
-    "punctuation_normalization",
-    "typo_correction",
-    "hyphenation_fix",
-    "formatting",
-  ]).describe("Category of the edit for filtering and review"),
+  category: z
+    .enum([
+      "ocr_error",
+      "punctuation_normalization",
+      "typo_correction",
+      "hyphenation_fix",
+      "formatting",
+    ])
+    .describe("Category of the edit for filtering and review"),
 });
 
 export type CleanupPatch = z.infer<typeof CleanupPatchSchema>;
+
+export const CLEANUP_CONFIDENCE_LABEL_SCORES = {
+  high: 0.9,
+  low: 0.55,
+} as const;
+
+function clampUnitInterval(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeConfidenceScore(value: number): number | null {
+  if (Number.isNaN(value)) {
+    return null;
+  }
+  if (value === Number.POSITIVE_INFINITY) {
+    return 1;
+  }
+  if (value === Number.NEGATIVE_INFINITY) {
+    return 0;
+  }
+  return clampUnitInterval(value);
+}
+
+/**
+ * Derive effective numeric confidence for policy decisions.
+ *
+ * - Uses explicit confidenceScore when valid
+ * - Falls back to confidence label mapping
+ * - Safely normalizes non-finite values
+ */
+export function deriveEffectivePatchConfidenceScore(
+  patch: Pick<CleanupPatch, "confidence" | "confidenceScore">,
+): number {
+  if (typeof patch.confidenceScore === "number") {
+    const normalized = normalizeConfidenceScore(patch.confidenceScore);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+
+  return CLEANUP_CONFIDENCE_LABEL_SCORES[patch.confidence];
+}
 
 /**
  * Full AI cleanup response
  */
 export const CleanupResponseSchema = z.object({
-  patches: z.array(CleanupPatchSchema).describe("Array of edit patches to apply"),
-  summary: z.string().max(500).describe("Brief summary of all suggested changes"),
-  preservationNotes: z.array(z.string()).describe(
-    "Notes about archaic or unusual elements that were intentionally preserved"
-  ),
-  stats: z.object({
-    highConfidencePatches: z.number().int().min(0),
-    lowConfidencePatches: z.number().int().min(0),
-    ocrErrorsFixed: z.number().int().min(0),
-    punctuationNormalizations: z.number().int().min(0),
-  }).describe("Statistics about the cleanup operation"),
+  patches: z
+    .array(CleanupPatchSchema)
+    .describe("Array of edit patches to apply"),
+  summary: z
+    .string()
+    .max(500)
+    .describe("Brief summary of all suggested changes"),
+  preservationNotes: z
+    .array(z.string())
+    .describe(
+      "Notes about archaic or unusual elements that were intentionally preserved",
+    ),
+  stats: z
+    .object({
+      highConfidencePatches: z.number().int().min(0),
+      lowConfidencePatches: z.number().int().min(0),
+      ocrErrorsFixed: z.number().int().min(0),
+      punctuationNormalizations: z.number().int().min(0),
+    })
+    .describe("Statistics about the cleanup operation"),
 });
 
 export type CleanupResponse = z.infer<typeof CleanupResponseSchema>;
@@ -115,6 +184,7 @@ Respond with a JSON object matching this structure:
       "original": "text",
       "replacement": "fixed",
       "confidence": "high" | "low",
+      "confidenceScore": 0.0 to 1.0 (optional),
       "reason": "Clear OCR error: 1 should be l",
       "category": "ocr_error" | "punctuation_normalization" | "typo_correction" | "hyphenation_fix" | "formatting"
     }
@@ -147,7 +217,7 @@ export function buildSegmentPrompt(
     previousContext?: string;
     nextContext?: string;
     isDialogueHeavy?: boolean;
-  } = {}
+  } = {},
 ): string {
   let prompt = "# Text Cleanup Analysis Request\n\n";
 
@@ -173,7 +243,8 @@ export function buildSegmentPrompt(
   // Add content notes
   if (options.isDialogueHeavy) {
     prompt += "## Content Note\n";
-    prompt += "This segment contains substantial dialogue. Be extra careful to preserve dialect, colloquialisms, and speech patterns.\n\n";
+    prompt +=
+      "This segment contains substantial dialogue. Be extra careful to preserve dialect, colloquialisms, and speech patterns.\n\n";
   }
 
   // Add surrounding context for continuity
@@ -209,7 +280,7 @@ export function buildSegmentPrompt(
 export function buildFinalSummaryPrompt(
   segmentSummaries: string[],
   totalPatches: number,
-  lowConfidenceCount: number
+  lowConfidenceCount: number,
 ): string {
   return `# Cleanup Summary Request
 
@@ -242,12 +313,17 @@ Respond with JSON:
  */
 export function validateCleanupResponse(
   rawResponse: unknown,
-  originalText: string
-): { success: true; data: CleanupResponse } | { success: false; error: string } {
+  originalText: string,
+):
+  | { success: true; data: CleanupResponse }
+  | { success: false; error: string } {
   // First, validate against schema
   const parsed = CleanupResponseSchema.safeParse(rawResponse);
   if (!parsed.success) {
-    return { success: false, error: `Schema validation failed: ${parsed.error.message}` };
+    return {
+      success: false,
+      error: `Schema validation failed: ${parsed.error.message}`,
+    };
   }
 
   const data = parsed.data;
@@ -258,21 +334,31 @@ export function validateCleanupResponse(
   for (const patch of data.patches) {
     // Check offset bounds
     if (patch.start < 0 || patch.end > originalText.length) {
-      validationErrors.push(`Patch offsets out of bounds: ${patch.start}-${patch.end} (text length: ${originalText.length})`);
+      validationErrors.push(
+        `Patch offsets out of bounds: ${patch.start}-${patch.end} (text length: ${originalText.length})`,
+      );
       continue;
     }
 
     // Check start <= end
     if (patch.start > patch.end) {
-      validationErrors.push(`Invalid patch: start (${patch.start}) > end (${patch.end})`);
+      validationErrors.push(
+        `Invalid patch: start (${patch.start}) > end (${patch.end})`,
+      );
       continue;
     }
 
     // Verify original text matches
     const actualOriginal = originalText.slice(patch.start, patch.end);
     if (actualOriginal !== patch.original) {
+      const preview = (value: string): string => {
+        const normalized = value.replace(/\s+/g, " ").trim();
+        return normalized.length <= 24
+          ? normalized
+          : `${normalized.slice(0, 24)}…`;
+      };
       validationErrors.push(
-        `Text mismatch at ${patch.start}-${patch.end}: expected "${patch.original.slice(0, 50)}...", found "${actualOriginal.slice(0, 50)}..."`
+        `Text mismatch at ${patch.start}-${patch.end}: expected(len=${patch.original.length}, preview="${preview(patch.original)}"), found(len=${actualOriginal.length}, preview="${preview(actualOriginal)}")`,
       );
       continue;
     }
@@ -291,11 +377,7 @@ export function validateCleanupResponse(
     data: {
       ...data,
       patches: validPatches,
-      stats: {
-        ...data.stats,
-        highConfidencePatches: validPatches.filter(p => p.confidence === "high").length,
-        lowConfidencePatches: validPatches.filter(p => p.confidence === "low").length,
-      },
+      stats: calculatePatchStats(validPatches),
     },
   };
 }
@@ -303,11 +385,16 @@ export function validateCleanupResponse(
 /**
  * Calculate statistics from patches
  */
-export function calculatePatchStats(patches: CleanupPatch[]): CleanupResponse["stats"] {
+export function calculatePatchStats(
+  patches: CleanupPatch[],
+): CleanupResponse["stats"] {
   return {
-    highConfidencePatches: patches.filter(p => p.confidence === "high").length,
-    lowConfidencePatches: patches.filter(p => p.confidence === "low").length,
-    ocrErrorsFixed: patches.filter(p => p.category === "ocr_error").length,
-    punctuationNormalizations: patches.filter(p => p.category === "punctuation_normalization").length,
+    highConfidencePatches: patches.filter((p) => p.confidence === "high")
+      .length,
+    lowConfidencePatches: patches.filter((p) => p.confidence === "low").length,
+    ocrErrorsFixed: patches.filter((p) => p.category === "ocr_error").length,
+    punctuationNormalizations: patches.filter(
+      (p) => p.category === "punctuation_normalization",
+    ).length,
   };
 }

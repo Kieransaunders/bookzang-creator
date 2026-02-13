@@ -3,23 +3,24 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.bookzang.ingest.daemon</string>
+  <string>__LABEL__</string>
 
   <key>WorkingDirectory</key>
   <string>__WORKDIR__</string>
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/env</string>
-    <string>npm</string>
-    <string>run</string>
-    <string>daemon:ingest</string>
+    <string>__NODE_BIN__</string>
+    <string>__TSX_BIN__</string>
+    <string>__DAEMON_ENTRY__</string>
   </array>
 
   <key>EnvironmentVariables</key>
   <dict>
     <key>LIBRARY_ROOT</key>
     <string>__LIBRARY_ROOT__</string>
+    <key>PATH</key>
+    <string>__SYSTEM_PATH__</string>
   </dict>
 
   <key>RunAtLoad</key>

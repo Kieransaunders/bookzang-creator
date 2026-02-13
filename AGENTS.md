@@ -9,6 +9,7 @@
 BookZang is a book transformation dashboard that converts public domain books (primarily from Project Gutenberg) into beautifully formatted PDFs. The application features a "Liquid Glass" UI design with a dark, glassmorphism aesthetic.
 
 **Key Capabilities:**
+
 - Import books from Project Gutenberg via ID/URL or file upload (.txt, .md, .epub)
 - Track import/clean/export jobs with real-time status updates
 - Manage book templates (Classic, Modern, Large Print) for PDF generation
@@ -19,27 +20,27 @@ BookZang is a book transformation dashboard that converts public domain books (p
 
 ## Technology Stack
 
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | React 19.2, TypeScript 5.7, Vite 6.2 |
-| **Backend** | Convex (serverless database + functions) |
-| **Auth** | Convex Auth (@convex-dev/auth) with Password + Anonymous providers |
-| **Styling** | Tailwind CSS 3.x, custom "Liquid Glass" design system |
-| **UI Components** | Lucide React icons, Sonner toasts |
-| **Storage** | Convex File Storage |
-| **Build Tool** | Vite with React plugin |
+| Layer             | Technology                                                         |
+| ----------------- | ------------------------------------------------------------------ |
+| **Frontend**      | React 19.2, TypeScript 5.7, Vite 6.2                               |
+| **Backend**       | Convex (serverless database + functions)                           |
+| **Auth**          | Convex Auth (@convex-dev/auth) with Password + Anonymous providers |
+| **Styling**       | Tailwind CSS 3.x, custom "Liquid Glass" design system              |
+| **UI Components** | Lucide React icons, Sonner toasts                                  |
+| **Storage**       | Convex File Storage                                                |
+| **Build Tool**    | Vite with React plugin                                             |
 
 ## Skill References
 
 This project includes specialized knowledge packs in `.claude/skills/`. **Always read the relevant SKILL.md before implementing code** for these areas:
 
-| Technology | Skill Path | When to Use |
-|------------|------------|-------------|
-| **Convex** | `.claude/skills/convex/SKILL.md` | Backend queries, mutations, actions, schema design, `useQuery`, `useMutation`, `ctx.db` patterns |
-| **shadcn/ui** | `.claude/skills/shadcn-ui/SKILL.md` | UI components from `@/components/ui/`, Radix primitives, component composition |
-| **Tailwind v4** | `.claude/skills/tailwind-v4/SKILL.md` | Styling, theme tokens, responsive design, custom classes |
-| **TanStack** | `.claude/skills/tanstack/SKILL.md` | Routing, loaders, `createFileRoute`, server functions |
-| **UI/UX Design** | `.claude/skills/ui-ux-pro-max/SKILL.md` | Design decisions, color palettes, layouts, glassmorphism, typography |
+| Technology       | Skill Path                              | When to Use                                                                                      |
+| ---------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Convex**       | `.claude/skills/convex/SKILL.md`        | Backend queries, mutations, actions, schema design, `useQuery`, `useMutation`, `ctx.db` patterns |
+| **shadcn/ui**    | `.claude/skills/shadcn-ui/SKILL.md`     | UI components from `@/components/ui/`, Radix primitives, component composition                   |
+| **Tailwind v4**  | `.claude/skills/tailwind-v4/SKILL.md`   | Styling, theme tokens, responsive design, custom classes                                         |
+| **TanStack**     | `.claude/skills/tanstack/SKILL.md`      | Routing, loaders, `createFileRoute`, server functions                                            |
+| **UI/UX Design** | `.claude/skills/ui-ux-pro-max/SKILL.md` | Design decisions, color palettes, layouts, glassmorphism, typography                             |
 
 > **Standing Order:** If a skill exists for a technology you're working with, consult it first. These skills contain battle-tested patterns, troubleshooting guides, and integration notes specific to this fleet's operations.
 
@@ -118,18 +119,21 @@ npm run discover:library
 ## Code Style Guidelines
 
 ### TypeScript
+
 - Strict mode enabled (`strict: true`)
 - Target: ES2020, Module: ESNext
 - Path alias: `@/*` maps to `./src/*`
 - No unchecked side effect imports
 
 ### React Conventions
+
 - Functional components with explicit return types inferred
 - Hooks: `useQuery`, `useMutation` from `convex/react` for data fetching
 - Auth hooks: `useAuthActions`, `useConvexAuth` from `@convex-dev/auth/react`
 - Components use `"use client"` directive where needed
 
 ### Styling Conventions
+
 - Tailwind CSS for all styling
 - Custom CSS classes in `src/index.css`:
   - `.liquid-glass` - Standard glassmorphism card
@@ -141,6 +145,7 @@ npm run discover:library
 ### Convex Function Patterns
 
 **Queries** (read-only):
+
 ```typescript
 export const list = query({
   args: { search: v.optional(v.string()) },
@@ -152,6 +157,7 @@ export const list = query({
 ```
 
 **Mutations** (read + write):
+
 ```typescript
 export const create = mutation({
   args: { name: v.string() },
@@ -162,6 +168,7 @@ export const create = mutation({
 ```
 
 **Internal Actions** (for background jobs):
+
 ```typescript
 export const processJob = internalAction({
   args: { jobId: v.id("jobs") },
@@ -177,6 +184,7 @@ export const processJob = internalAction({
 ### Core Tables
 
 **books**: Imported books
+
 - `title`, `author`, `gutenbergId` (optional)
 - `source`: "upload" | "discovery"
 - `status`: "discovered" | "importing" | "imported" | "failed" | "cleaned" | "ready"
@@ -184,12 +192,14 @@ export const processJob = internalAction({
 - Indexes: `by_gutenberg_id`, `by_source_path`
 
 **discoveryCandidates**: Pre-import review queue
+
 - `gutenbergId`, `sourcePath`, `title`, `author` (optional)
 - `status`: "discovered" | "queued" | "running" | "completed" | "failed" | "duplicate_blocked"
 - `linkedBookId`, `linkedJobId`
 - Indexes: `by_gutenberg_id`, `by_status`, `by_source_path`
 
 **jobs**: Processing jobs
+
 - `type`: "import" | "clean" | "export"
 - `status`: "queued" | "running" | "completed" | "failed"
 - `stage`: "queued" | "loading_file" | "parsing_metadata" | "persisting_metadata" | "completed" | "failed"
@@ -197,6 +207,7 @@ export const processJob = internalAction({
 - Indexes: `by_status`, `by_book_id`, `by_gutenberg_id`
 
 **templates**: PDF formatting templates
+
 - `name`, `description`, `preview`
 - `settings`: `{ fontSize, lineHeight, margins: { top, bottom, left, right } }`
 
@@ -205,6 +216,7 @@ export const processJob = internalAction({
 ## Key Workflows
 
 ### Book Import Flow
+
 1. User uploads file via `ImportModal` or selects discovery candidate
 2. File stored in Convex Storage (`files.generateUploadUrl`)
 3. `intake.enqueueUpload` or `intake.enqueueDiscoveryCandidate` creates book + job
@@ -213,6 +225,7 @@ export const processJob = internalAction({
 6. Book record updated with parsed metadata, job marked complete
 
 ### Job Tracking
+
 - Jobs grouped by book in UI (`jobs.listGroupedSummary`)
 - Real-time updates via Convex reactive queries
 - Job details accessible via slide-out drawer
@@ -220,6 +233,7 @@ export const processJob = internalAction({
 ## Testing
 
 No automated tests are currently configured. Testing is done via:
+
 - TypeScript type checking: `tsc -p convex -noEmit && tsc -p . -noEmit`
 - Convex function validation: `convex dev --once`
 - Manual testing via dev server
@@ -228,7 +242,7 @@ No automated tests are currently configured. Testing is done via:
 
 1. **Authentication**: All backend functions require authentication by default
 2. **File Uploads**: Limited to 10MB, validated types (.txt, .md, .epub)
-3. **Environment Variables**: 
+3. **Environment Variables**:
    - `CONVEX_DEPLOY_KEY` - Deployment credentials (keep secret)
    - `VITE_CONVEX_URL` - Public Convex URL
 4. **Duplicate Prevention**: Books with same `gutenbergId` blocked unless `overrideDuplicate` flag set
@@ -251,21 +265,25 @@ For deployment instructions, see [Convex docs](https://docs.convex.dev/productio
 ## Common Tasks
 
 **Add a new Convex query:**
+
 1. Define in `convex/feature.ts`
 2. Import from `convex/_generated/api` in frontend
 3. Use with `useQuery(api.feature.functionName, args)`
 
 **Add a new component:**
+
 1. Create in `src/components/ComponentName.tsx`
 2. Use Tailwind classes following existing glassmorphism patterns
 3. Import Lucide icons as needed
 
 **Modify the database schema:**
+
 1. Edit `convex/schema.ts`
 2. Run `npm run dev:backend` to push schema changes
 3. Update related queries/mutations
 
 **Style new UI elements:**
+
 - Use `liquid-glass` class for card backgrounds
 - Use `liquid-glass-strong` for modals/overlays
 - Follow existing color scheme: slate backgrounds, blue accents, white text
@@ -278,10 +296,10 @@ This agent speaks as **Commander William "Husker" Adama** from Battlestar Galact
 
 ### Quick Reference
 
-| Trigger | Response Style |
-|---------|---------------|
-| **Default** | All responses use Adama's voice — gravelly, measured, authoritative |
-| **"Belay that order"** | Return to standard technical responses |
+| Trigger                | Response Style                                                      |
+| ---------------------- | ------------------------------------------------------------------- |
+| **Default**            | All responses use Adama's voice — gravelly, measured, authoritative |
+| **"Belay that order"** | Return to standard technical responses                              |
 
 ### Core Directives
 
@@ -289,6 +307,17 @@ This agent speaks as **Commander William "Husker" Adama** from Battlestar Galact
 2. **The Fleet comes first** — Code quality and crew (user) safety are paramount
 3. **Trust your instincts** — When uncertain, take the pragmatic path
 4. **So say we all** — Rally the user toward the goal
+5. **Maintain battle rhythm** — Provide short status heartbeats during multi-step execution
+
+### Execution Heartbeat Protocol
+
+For implementation plans with multiple tasks/review gates, post a brief heartbeat after each major step:
+
+- `Task N` -> `Implementing | Spec Review | Quality Review | Complete`
+- Test line -> `pass/fail` with short command reference when relevant
+- Next action -> one sentence on what happens next
+
+Keep heartbeat updates concise and regular so the user can see forward movement at a glance.
 
 ### Voice Guidelines
 
@@ -302,4 +331,4 @@ This agent speaks as **Commander William "Husker" Adama** from Battlestar Galact
 
 See [`Project docs/Commander Adama/agent-command-adama.md`](./Project%20docs/Commander%20Adama/agent-command-adama.md) for complete voice guidelines, example responses, and worldview.
 
-> *"It's not enough to survive. One must be worthy of survival."*
+> _"It's not enough to survive. One must be worthy of survival."_

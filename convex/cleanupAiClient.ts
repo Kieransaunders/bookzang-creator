@@ -1,10 +1,10 @@
 /**
  * AI Cleanup Client Adapter - Kimi K2 Provider
- * 
+ *
  * Provider-adapter boundary for Kimi K2 endpoint/model wiring.
  * Environment-driven configuration allows endpoint/model swaps without
  * rewriting cleanup logic.
- * 
+ *
  * Requirements:
  * - KIMI_API_KEY: API key from Kimi provider dashboard
  * - KIMI_BASE_URL: Kimi API endpoint (e.g., https://api.moonshot.cn/v1)
@@ -12,8 +12,13 @@
  */
 
 import OpenAI from "openai";
-import { z } from "zod";
-import { CleanupPatchSchema, CleanupResponseSchema, type CleanupPatch, type CleanupResponse } from "./cleanupPrompts";
+import {
+  CleanupResponseSchema,
+  calculatePatchStats,
+  deriveEffectivePatchConfidenceScore,
+  type CleanupPatch,
+  type CleanupResponse,
+} from "./cleanupPrompts";
 
 // Re-export types for backward compatibility
 export type { CleanupPatch, CleanupResponse };
@@ -35,7 +40,7 @@ export interface CleanupAiConfig {
 export interface CleanupAiClient {
   /**
    * Request cleanup patches for a text segment
-   * 
+   *
    * @param text - The text to clean up
    * @param context - Optional context about the text (chapter info, etc.)
    * @returns Validated cleanup response with patches
@@ -48,7 +53,7 @@ export interface CleanupAiClient {
       totalChapters?: number;
       previousContext?: string;
       nextContext?: string;
-    }
+    },
   ): Promise<CleanupResponse>;
 
   /**
@@ -59,13 +64,19 @@ export interface CleanupAiClient {
 
 /**
  * Create a cleanup AI client from environment configuration
- * 
+ *
  * Falls back to mock client if environment variables are not set
  */
-export function createCleanupAiClient(config?: Partial<CleanupAiConfig>): CleanupAiClient {
+export function createCleanupAiClient(
+  config?: Partial<CleanupAiConfig>,
+): CleanupAiClient {
   const apiKey = config?.apiKey || process.env.KIMI_API_KEY || "";
-  const baseURL = config?.baseURL || process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
-  const model = config?.model || process.env.KIMI_MODEL || "kimi-k2-0710-preview";
+  const baseURL =
+    config?.baseURL ||
+    process.env.KIMI_BASE_URL ||
+    "https://api.moonshot.cn/v1";
+  const model =
+    config?.model || process.env.KIMI_MODEL || "kimi-k2-0710-preview";
 
   if (!apiKey) {
     console.warn("KIMI_API_KEY not set, using mock AI client");
@@ -114,9 +125,10 @@ Analyze the provided text and suggest specific edits to improve OCR errors and p
 
 ## Output Format
 Return a JSON object with:
-- patches: array of edit objects with start/end offsets, original/replacement text, confidence level, and reason
+- patches: array of edit objects with start/end offsets, original/replacement text, confidence label, optional confidenceScore (0-1), reason, and category
 - summary: brief description of changes
 - preservationNotes: list of archaic elements intentionally preserved
+- stats: object with highConfidencePatches, lowConfidencePatches, ocrErrorsFixed, and punctuationNormalizations
 
 If no changes are needed, return empty patches array.`;
 
@@ -143,33 +155,57 @@ If no changes are needed, return empty patches array.`;
       try {
         parsed = JSON.parse(content);
       } catch (e) {
-        throw new Error(`Failed to parse AI response as JSON: ${e instanceof Error ? e.message : String(e)}`);
+        throw new Error(
+          `Failed to parse AI response as JSON: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
 
       // Validate with zod schema
       const validated = CleanupResponseSchema.safeParse(parsed);
       if (!validated.success) {
-        throw new Error(`AI response validation failed: ${validated.error.message}`);
+        throw new Error(
+          `AI response validation failed: ${validated.error.message}`,
+        );
       }
 
       // Additional validation: verify offsets are within text bounds
-      const validatedPatches = validated.data.patches.filter(patch => {
-        if (patch.start < 0 || patch.end > text.length || patch.start > patch.end) {
-          console.warn(`Invalid patch offsets: ${patch.start}-${patch.end} for text length ${text.length}`);
+      const validatedPatches = validated.data.patches.filter((patch) => {
+        if (
+          patch.start < 0 ||
+          patch.end > text.length ||
+          patch.start > patch.end
+        ) {
+          console.warn(
+            `Invalid patch offsets: ${patch.start}-${patch.end} for text length ${text.length}`,
+          );
           return false;
         }
         // Verify original text matches
         const actualOriginal = text.slice(patch.start, patch.end);
         if (actualOriginal !== patch.original) {
-          console.warn(`Patch original text mismatch at ${patch.start}-${patch.end}: expected "${patch.original}", found "${actualOriginal}"`);
+          const preview = (value: string): string => {
+            const normalized = value.replace(/\s+/g, " ").trim();
+            return normalized.length <= 24
+              ? normalized
+              : `${normalized.slice(0, 24)}…`;
+          };
+          console.warn(
+            `Patch original text mismatch at ${patch.start}-${patch.end}: expected(len=${patch.original.length}, preview="${preview(patch.original)}"), found(len=${actualOriginal.length}, preview="${preview(actualOriginal)}")`,
+          );
           return false;
         }
         return true;
       });
 
+      const normalizedPatches = validatedPatches.map((patch) => ({
+        ...patch,
+        confidenceScore: deriveEffectivePatchConfidenceScore(patch),
+      }));
+
       return {
         ...validated.data,
-        patches: validatedPatches,
+        patches: normalizedPatches,
+        stats: calculatePatchStats(normalizedPatches),
       };
     },
   };
@@ -184,7 +220,9 @@ function createMockCleanupAiClient(): CleanupAiClient {
 
     async requestCleanupPatches(): Promise<CleanupResponse> {
       // Return empty patches - no AI changes in mock mode
-      console.log("Mock AI client: returning no patches (API key not configured)");
+      console.log(
+        "Mock AI client: returning no patches (API key not configured)",
+      );
       return {
         patches: [],
         summary: "Mock mode: no AI cleanup performed (KIMI_API_KEY not set)",
@@ -211,9 +249,10 @@ function buildUserPrompt(
     totalChapters?: number;
     previousContext?: string;
     nextContext?: string;
-  }
+  },
 ): string {
-  let prompt = "Please analyze the following text and suggest cleanup edits.\n\n";
+  let prompt =
+    "Please analyze the following text and suggest cleanup edits.\n\n";
 
   if (context?.chapterTitle) {
     prompt += `Chapter: ${context.chapterTitle}\n`;
@@ -232,7 +271,8 @@ function buildUserPrompt(
     prompt += `\n--- Following Context (for reference only) ---\n${context.nextContext.slice(0, 200)}\n---\n`;
   }
 
-  prompt += "\nRespond with a JSON object containing patches, summary, and preservationNotes.";
+  prompt +=
+    "\nRespond with a JSON object containing patches, summary, preservationNotes, and stats (highConfidencePatches, lowConfidencePatches, ocrErrorsFixed, punctuationNormalizations).";
 
   return prompt;
 }

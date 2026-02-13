@@ -9,7 +9,8 @@
     "dev:backend": "convex dev",
     "build": "vite build",
     "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && convex dev --once && vite build",
-    "discover:library": "tsx scripts/discover-library.ts"
+    "discover:library": "tsx scripts/discover-library.ts",
+    "test:cleanup-policy": "tsx --tsconfig tsconfig.test.json --test convex/__tests__/cleanupDecisionPolicy.test.ts"
   },
   "dependencies": {
     "@codemirror/merge": "^6.11.2",
