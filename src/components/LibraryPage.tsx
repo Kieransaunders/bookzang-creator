@@ -54,9 +54,12 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   });
   const startCleanup = useMutation(api.cleanup.startCleanup);
   const deleteBook = useMutation(api.books.deleteBook);
+  const deleteAllBooks = useMutation(api.books.deleteAllBooks);
   const [deletingBook, setDeletingBook] = useState<Id<"books"> | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] =
     useState<Id<"books"> | null>(null);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   // Poll for cleanup status on books that are being cleaned
   const cleanupStatuses = useQuery(
@@ -212,6 +215,28 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
       });
     } finally {
       setDeletingBook(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    const toastId = toast.loading("Deleting all books...");
+
+    try {
+      const result = await deleteAllBooks({});
+      toast.success("All books deleted", {
+        id: toastId,
+        description: `Removed ${result.deleted.books} books, ${result.deleted.revisions} revisions, ${result.deleted.chapters} chapters`,
+      });
+      setShowDeleteAllConfirm(false);
+    } catch (err) {
+      console.error("Failed to delete all books:", err);
+      toast.error("Failed to delete all books", {
+        id: toastId,
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -519,6 +544,68 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
 
       {/* Discovery Candidates - moved below books */}
       <DiscoveryCandidatesPanel />
+
+      {/* Delete All Books Section */}
+      {books && books.length > 0 && (
+        <div className="pt-8 border-t border-white/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-white/80">
+                Danger Zone
+              </h3>
+              <p className="text-xs text-white/50 mt-1">
+                Permanently delete all {books.length} books and associated data
+              </p>
+            </div>
+            <button
+              onClick={() => setShowDeleteAllConfirm(true)}
+              className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg transition-all duration-200 text-sm font-medium"
+            >
+              Delete All Books
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All Confirmation Modal */}
+      {showDeleteAllConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-rose-500/30 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="text-rose-400" size={28} />
+              <h3 className="text-xl font-semibold text-white">
+                Delete All Books?
+              </h3>
+            </div>
+            <p className="text-sm text-white/70 mb-6">
+              This will permanently delete <strong>all {books?.length} books</strong> and their associated cleanup data, jobs, and copyright checks. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteAllConfirm(false)}
+                disabled={isDeletingAll}
+                className="flex-1 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAll}
+                disabled={isDeletingAll}
+                className="flex-1 px-4 py-2.5 bg-rose-500 hover:bg-rose-400 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+              >
+                {isDeletingAll ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 size={14} className="animate-spin" />
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete Everything"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -194,6 +194,153 @@ export const listReadyBooks = query({
 });
 
 /**
+ * Delete all books and all associated data
+ * This is a hard delete - use with extreme caution
+ */
+export const deleteAllBooks = mutation({
+  args: {},
+  returns: v.object({
+    success: v.boolean(),
+    deleted: v.object({
+      books: v.number(),
+      originals: v.number(),
+      revisions: v.number(),
+      chapters: v.number(),
+      flags: v.number(),
+      jobs: v.number(),
+      cleanupJobs: v.number(),
+      copyrightChecks: v.number(),
+      discoveryCandidates: v.number(),
+    }),
+  }),
+  handler: async (ctx, _args) => {
+    let booksDeleted = 0;
+    let originalsDeleted = 0;
+    let revisionsDeleted = 0;
+    let chaptersDeleted = 0;
+    let flagsDeleted = 0;
+    let jobsDeleted = 0;
+    let cleanupJobsDeleted = 0;
+    let copyrightChecksDeleted = 0;
+    let discoveryCandidatesDeleted = 0;
+
+    // Get all books
+    const allBooks = await ctx.db.query("books").collect();
+
+    for (const book of allBooks) {
+      // Delete cleanup originals
+      const originals = await ctx.db
+        .query("cleanupOriginals")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const orig of originals) {
+        await ctx.db.delete(orig._id);
+        originalsDeleted++;
+      }
+
+      // Delete cleanup revisions
+      const revisions = await ctx.db
+        .query("cleanupRevisions")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const rev of revisions) {
+        await ctx.db.delete(rev._id);
+        revisionsDeleted++;
+      }
+
+      // Delete chapters
+      const chapters = await ctx.db
+        .query("cleanupChapters")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const ch of chapters) {
+        await ctx.db.delete(ch._id);
+        chaptersDeleted++;
+      }
+
+      // Delete flags
+      const flags = await ctx.db
+        .query("cleanupFlags")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const flag of flags) {
+        await ctx.db.delete(flag._id);
+        flagsDeleted++;
+      }
+
+      // Delete cleanup jobs
+      const cleanupJobs = await ctx.db
+        .query("cleanupJobs")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const job of cleanupJobs) {
+        await ctx.db.delete(job._id);
+        cleanupJobsDeleted++;
+      }
+
+      // Delete main jobs
+      const jobs = await ctx.db
+        .query("jobs")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const job of jobs) {
+        await ctx.db.delete(job._id);
+        jobsDeleted++;
+      }
+
+      // Delete copyright checks
+      const checks = await ctx.db
+        .query("copyrightChecks")
+        .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+        .collect();
+      for (const check of checks) {
+        await ctx.db.delete(check._id);
+        copyrightChecksDeleted++;
+      }
+
+      // Delete the book
+      await ctx.db.delete(book._id);
+      booksDeleted++;
+    }
+
+    // Also clear all discovery candidates since they're related to book imports
+    const candidates = await ctx.db.query("discoveryCandidates").collect();
+    for (const candidate of candidates) {
+      await ctx.db.delete(candidate._id);
+      discoveryCandidatesDeleted++;
+    }
+
+    // Clear any orphaned jobs without books
+    const orphanedJobs = await ctx.db.query("jobs").collect();
+    for (const job of orphanedJobs) {
+      if (job.bookId) {
+        // Check if book still exists
+        const book = await ctx.db.get(job.bookId);
+        if (!book) {
+          await ctx.db.delete(job._id);
+          jobsDeleted++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      deleted: {
+        books: booksDeleted,
+        originals: originalsDeleted,
+        revisions: revisionsDeleted,
+        chapters: chaptersDeleted,
+        flags: flagsDeleted,
+        jobs: jobsDeleted,
+        cleanupJobs: cleanupJobsDeleted,
+        copyrightChecks: copyrightChecksDeleted,
+        discoveryCandidates: discoveryCandidatesDeleted,
+      },
+    };
+  },
+});
+
+/**
  * Delete a book and all associated cleanup data
  * This is a hard delete - use with caution
  */
