@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["convex/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["convex/_generated", "dist", "node_modules"]
+}

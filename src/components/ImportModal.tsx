@@ -111,6 +111,7 @@ export function ImportModal({ onClose }: ImportModalProps) {
         fileName: selectedFile.name,
         gutenbergId: parsedGutenbergId ?? undefined,
         overrideDuplicate,
+        ingestMode: "quality",
       });
 
       if (response?.status === "duplicate_blocked") {
@@ -126,7 +127,7 @@ export function ImportModal({ onClose }: ImportModalProps) {
         return;
       }
 
-      toast.success("Upload accepted. Intake started.");
+      toast.success("Upload accepted. Quality mode intake queued.");
       onClose();
     } catch (error) {
       toast.error("Failed to upload book");
@@ -362,6 +363,9 @@ export function ImportModal({ onClose }: ImportModalProps) {
               <div className="text-sm text-emerald-200/80">
                 <p className="font-medium text-emerald-200 mb-1">Supported formats</p>
                 <p>Plain text (.txt), Markdown (.md), and EPUB files are supported. Maximum file size is 10MB.</p>
+                <p className="mt-2 text-emerald-100/90">
+                  Quality mode is always enabled: local daemon prefers EPUB when available and falls back to TXT.
+                </p>
               </div>
             </div>
           </div>
