@@ -12,6 +12,26 @@ const extractLineValue = (text: string, key: "Title" | "Author") => {
   return match?.[1]?.trim();
 };
 
+const YEAR_PATTERN = /\b(18\d{2}|19\d{2}|20\d{2})\b/;
+
+const extractYear = (body: string): string | undefined => {
+  // Look for copyright year first (most reliable)
+  const copyrightMatch = body.match(/Copyright(?:,)?\s*(?:©)?\s*(\d{4})/i);
+  if (copyrightMatch) {
+    return copyrightMatch[1];
+  }
+
+  // Look for year standalone in first 1000 characters of body
+  // Common pattern: year appears on its own line after author
+  const firstChunk = body.slice(0, 2000);
+  const yearMatch = firstChunk.match(YEAR_PATTERN);
+  if (yearMatch) {
+    return yearMatch[1];
+  }
+
+  return undefined;
+};
+
 const parseMetadata = (text: string) => {
   const title = extractLineValue(text, "Title") ?? "Unknown Title";
   const author = extractLineValue(text, "Author") ?? "Unknown Author";
@@ -26,9 +46,12 @@ const parseMetadata = (text: string) => {
           .trim()
       : text.trim();
 
+  const year = extractYear(body);
+
   return {
     title,
     author,
+    year,
     bodyLength: body.length,
   };
 };
@@ -76,6 +99,7 @@ export const extractAndPersist = internalAction({
         candidateId: args.candidateId,
         title: parsed.title,
         author: parsed.author,
+        year: parsed.year,
         bodyLength: parsed.bodyLength,
       });
     } catch (error) {
@@ -139,6 +163,7 @@ export const markCompleted = internalMutation({
     candidateId: v.optional(v.id("discoveryCandidates")),
     title: v.string(),
     author: v.string(),
+    year: v.optional(v.string()),
     bodyLength: v.number(),
   },
   handler: async (ctx, args) => {
@@ -147,6 +172,7 @@ export const markCompleted = internalMutation({
     await ctx.db.patch(args.bookId, {
       title: args.title,
       author: args.author,
+      publicationYear: args.year ? parseInt(args.year, 10) : undefined,
       status: "imported",
       copyrightStatus: "checking",
       lastError: undefined,

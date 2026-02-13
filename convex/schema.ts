@@ -8,6 +8,7 @@ const applicationTables = {
     title: v.string(),
     author: v.string(),
     gutenbergId: v.optional(v.string()),
+    publicationYear: v.optional(v.number()),
     source: v.union(v.literal("upload"), v.literal("discovery")),
     sourcePath: v.optional(v.string()),
     status: v.union(
