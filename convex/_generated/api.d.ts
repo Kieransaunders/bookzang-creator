@@ -33,6 +33,7 @@ import type * as jobStages from "../jobStages.js";
 import type * as jobs from "../jobs.js";
 import type * as openrouterRouting from "../openrouterRouting.js";
 import type * as router from "../router.js";
+import type * as studyGuides from "../studyGuides.js";
 import type * as templates from "../templates.js";
 
 import type {
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   openrouterRouting: typeof openrouterRouting;
   router: typeof router;
+  studyGuides: typeof studyGuides;
   templates: typeof templates;
 }>;
 

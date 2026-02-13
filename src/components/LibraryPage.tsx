@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   Search,
   Book,
+  BookOpen,
   User,
   Calendar,
   FileText,
@@ -20,7 +21,10 @@ import {
   Trash2,
   AlertTriangle,
   ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { StudyGuideList } from "./StudyGuideList";
 
 interface LibraryPageProps {
   onEnterReview?: (bookId: Id<"books">) => void;
@@ -60,6 +64,7 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
     useState<Id<"books"> | null>(null);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [expandedGuidesFor, setExpandedGuidesFor] = useState<Id<"books"> | null>(null);
 
   // Poll for cleanup status on books that are being cleaned
   const cleanupStatuses = useQuery(
@@ -487,6 +492,24 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                       </div>
                     )}
 
+                    {/* Study Guides Toggle - only for ready/cleaned books */}
+                    {(book.status === "ready" || book.status === "cleaned") && (
+                      <button
+                        onClick={() => setExpandedGuidesFor(expandedGuidesFor === book._id ? null : book._id)}
+                        className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-700/30 hover:bg-slate-700/50 text-white/70 border border-white/10 rounded-lg transition-all duration-200 text-sm"
+                      >
+                        <span className="flex items-center gap-2">
+                          <BookOpen size={14} />
+                          Study Guides
+                        </span>
+                        {expandedGuidesFor === book._id ? (
+                          <ChevronUp size={14} />
+                        ) : (
+                          <ChevronDown size={14} />
+                        )}
+                      </button>
+                    )}
+
                     {/* Delete button */}
                     <button
                       onClick={() => setShowDeleteConfirm(book._id)}
@@ -506,6 +529,13 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                       )}
                     </button>
                   </div>
+
+                  {/* Study Guides Section */}
+                  {expandedGuidesFor === book._id && (
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <StudyGuideList bookId={book._id} bookTitle={book.title} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Delete Confirmation Modal */}

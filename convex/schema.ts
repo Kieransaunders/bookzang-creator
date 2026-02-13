@@ -359,6 +359,122 @@ const applicationTables = {
   })
     .index("by_book_id", ["bookId"])
     .index("by_status", ["status"]),
+
+  // Study Guides - companion content for books
+  studyGuides: defineTable({
+    bookId: v.id("books"),
+    title: v.string(),
+    subtitle: v.optional(v.string()),
+    guideType: v.optional(v.union(
+      v.literal("study_guide"),
+      v.literal("companion"),
+      v.literal("workbook"),
+      v.literal("exam_prep"),
+      v.literal("teacher_edition"),
+      v.literal("book_club"),
+    )),
+    targetAudience: v.optional(v.union(
+      v.literal("middle_school"),
+      v.literal("high_school"),
+      v.literal("college"),
+      v.literal("graduate"),
+      v.literal("general_readers"),
+      v.literal("book_club"),
+      v.literal("educators"),
+    )),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("generating"),
+      v.literal("review_pending"),
+      v.literal("published"),
+    ),
+    disclaimer: v.optional(v.string()),
+    generationMethod: v.optional(v.union(
+      v.literal("ai_draft_human_edited"),
+      v.literal("fully_human_written"),
+      v.literal("ai_assisted"),
+    )),
+    originalityVerified: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+  })
+    .index("by_book_id", ["bookId"])
+    .index("by_status", ["status"]),
+
+  // Individual sections within a study guide
+  studyGuideSections: defineTable({
+    guideId: v.id("studyGuides"),
+    sectionType: v.union(
+      v.literal("about_author"),
+      v.literal("historical_background"),
+      v.literal("literary_context"),
+      v.literal("chapter_summary"),
+      v.literal("character_analysis"),
+      v.literal("theme_breakdown"),
+      v.literal("symbolism_guide"),
+      v.literal("vocabulary_list"),
+      v.literal("discussion_questions"),
+      v.literal("essay_prompts"),
+      v.literal("reflection_pages"),
+      v.literal("quick_summary"),
+      v.literal("character_cheat_sheet"),
+      v.literal("theme_matrix"),
+      v.literal("practice_essays"),
+      v.literal("quotation_bank"),
+    ),
+    // Link to specific chapter if applicable
+    chapterId: v.optional(v.id("cleanupChapters")),
+    chapterNumber: v.optional(v.number()),
+    order: v.number(),
+    title: v.string(),
+    content: v.string(), // Markdown/rich text
+    contentFormat: v.optional(v.union(v.literal("markdown"), v.literal("html"))),
+    metadata: v.optional(v.object({
+      difficulty: v.optional(v.string()),
+      timeEstimate: v.optional(v.string()),
+      wordCount: v.optional(v.number()),
+    })),
+    aiGenerated: v.optional(v.boolean()),
+    humanEdited: v.optional(v.boolean()),
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    status: v.optional(v.union(v.literal("draft"), v.literal("reviewed"), v.literal("approved"))),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_guide_id", ["guideId"])
+    .index("by_guide_id_order", ["guideId", "order"])
+    .index("by_chapter_id", ["chapterId"]),
+
+  // Guide generation jobs for background processing
+  guideGenerationJobs: defineTable({
+    bookId: v.id("books"),
+    guideId: v.id("studyGuides"),
+    stage: v.union(
+      v.literal("queued"),
+      v.literal("analyzing_book"),
+      v.literal("generating_sections"),
+      v.literal("human_review_pending"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    progress: v.optional(v.number()),
+    totalSections: v.number(),
+    completedSections: v.number(),
+    currentSection: v.optional(v.string()),
+    aiModel: v.optional(v.string()),
+    tokensUsed: v.optional(v.number()),
+    estimatedCost: v.optional(v.number()),
+    error: v.optional(v.string()),
+    logs: v.optional(v.array(v.string())),
+    queuedAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+  })
+    .index("by_guide_id", ["guideId"])
+    .index("by_status", ["stage"]),
 };
 
 export default defineSchema({
