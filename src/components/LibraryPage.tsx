@@ -1,11 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { DiscoveryCandidatesPanel } from "./DiscoveryCandidatesPanel";
+import { CopyrightStatusBadge } from "./CopyrightStatusBadge";
 import { toast } from "sonner";
 
-import { Search, Book, User, Calendar, FileText, Download, Edit3, Play, Loader2, Sparkles, CheckCircle2, Trash2, AlertTriangle } from "lucide-react";
+import {
+  Search,
+  Book,
+  User,
+  Calendar,
+  FileText,
+  Download,
+  Edit3,
+  Play,
+  Loader2,
+  CheckCircle2,
+  Trash2,
+  AlertTriangle,
+} from "lucide-react";
 
 interface LibraryPageProps {
   onEnterReview?: (bookId: Id<"books">) => void;
@@ -30,37 +44,41 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   const [inputValue, setInputValue] = useState("");
-  const [startingCleanupFor, setStartingCleanupFor] = useState<Id<"books"> | null>(null);
+  const [startingCleanupFor, setStartingCleanupFor] =
+    useState<Id<"books"> | null>(null);
   const [activeCleanups, setActiveCleanups] = useState<Set<string>>(new Set());
   const debouncedSearch = useDebounce(inputValue, 300);
-  const books = useQuery(api.books.list, { search: debouncedSearch || undefined });
+  const books = useQuery(api.books.list, {
+    search: debouncedSearch || undefined,
+  });
   const startCleanup = useMutation(api.cleanup.startCleanup);
   const deleteBook = useMutation(api.books.deleteBook);
   const [deletingBook, setDeletingBook] = useState<Id<"books"> | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Id<"books"> | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] =
+    useState<Id<"books"> | null>(null);
 
   // Poll for cleanup status on books that are being cleaned
   const cleanupStatuses = useQuery(
     api.cleanup.getCleanupStatusesForBooks,
-    activeCleanups.size > 0 
-      ? { bookIds: Array.from(activeCleanups).map(id => id as Id<"books">) }
-      : "skip"
+    activeCleanups.size > 0
+      ? { bookIds: Array.from(activeCleanups).map((id) => id as Id<"books">) }
+      : "skip",
   );
 
   // Update active cleanups when books change status
   useEffect(() => {
     if (!books || !cleanupStatuses) return;
-    
+
     const completed = new Set(activeCleanups);
-    
+
     cleanupStatuses.forEach((status) => {
       if (status?.status === "completed" || status?.status === "failed") {
         completed.delete(status.bookId);
-        
+
         // Show toast notification
         if (status.status === "completed") {
-          const book = books.find(b => b._id === status.bookId);
-          toast.success(`"${book?.title || 'Book'}" cleanup complete!`, {
+          const book = books.find((b) => b._id === status.bookId);
+          toast.success(`"${book?.title || "Book"}" cleanup complete!`, {
             description: "Ready for review.",
             action: {
               label: "Review",
@@ -68,14 +86,14 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
             },
           });
         } else if (status.status === "failed") {
-          const book = books.find(b => b._id === status.bookId);
-          toast.error(`"${book?.title || 'Book'}" cleanup failed`, {
+          const book = books.find((b) => b._id === status.bookId);
+          toast.error(`"${book?.title || "Book"}" cleanup failed`, {
             description: status.error || "Check Jobs page for details.",
           });
         }
       }
     });
-    
+
     if (completed.size !== activeCleanups.size) {
       setActiveCleanups(completed);
     }
@@ -136,13 +154,14 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   const handleStartCleanup = async (bookId: Id<"books">, bookTitle: string) => {
     setStartingCleanupFor(bookId);
     const toastId = toast.loading(`Starting cleanup for "${bookTitle}"...`);
-    
+
     try {
       await startCleanup({ bookId });
-      setActiveCleanups(prev => new Set(prev).add(bookId));
+      setActiveCleanups((prev) => new Set(prev).add(bookId));
       toast.success("Cleanup started!", {
         id: toastId,
-        description: "Processing in background. You'll be notified when complete.",
+        description:
+          "Processing in background. You'll be notified when complete.",
       });
     } catch (err) {
       console.error("Failed to start cleanup:", err);
@@ -158,7 +177,7 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   const handleDeleteBook = async (bookId: Id<"books">, bookTitle: string) => {
     setDeletingBook(bookId);
     const toastId = toast.loading(`Deleting "${bookTitle}"...`);
-    
+
     try {
       const result = await deleteBook({ bookId });
       toast.success(`"${bookTitle}" deleted`, {
@@ -178,8 +197,9 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
   };
 
   const getCleanupProgress = (bookId: string) => {
-    const status = cleanupStatuses?.find(s => s?.bookId === bookId);
-    if (!status || status.status === "completed" || status.status === "failed") return null;
+    const status = cleanupStatuses?.find((s) => s?.bookId === bookId);
+    if (!status || status.status === "completed" || status.status === "failed")
+      return null;
     return {
       stage: status.stage,
       progress: status.progress,
@@ -189,15 +209,24 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
 
   const getStageLabel = (stage?: string) => {
     switch (stage) {
-      case "queued": return "Queued";
-      case "loading_original": return "Loading...";
-      case "boilerplate_removal": return "Removing boilerplate...";
-      case "paragraph_unwrap": return "Unwrapping paragraphs...";
-      case "chapter_detection": return "Detecting chapters...";
-      case "punctuation_normalization": return "Normalizing punctuation...";
-      case "completed": return "Complete";
-      case "failed": return "Failed";
-      default: return "Processing...";
+      case "queued":
+        return "Queued";
+      case "loading_original":
+        return "Loading...";
+      case "boilerplate_removal":
+        return "Removing boilerplate...";
+      case "paragraph_unwrap":
+        return "Unwrapping paragraphs...";
+      case "chapter_detection":
+        return "Detecting chapters...";
+      case "punctuation_normalization":
+        return "Normalizing punctuation...";
+      case "completed":
+        return "Complete";
+      case "failed":
+        return "Failed";
+      default:
+        return "Processing...";
     }
   };
 
@@ -238,15 +267,20 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
             No books yet
           </h3>
           <p className="text-white/70 max-w-md mx-auto">
-            Import your first book from Project Gutenberg or upload a text file to get started
+            Import your first book from Project Gutenberg or upload a text file
+            to get started
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {books.map((book) => {
             const cleanupProgress = getCleanupProgress(book._id);
-            const isCleaning = activeCleanups.has(book._id) || cleanupProgress !== null;
-            
+            const isCleaning =
+              activeCleanups.has(book._id) || cleanupProgress !== null;
+            const isCopyrightBlocked = book.copyrightStatus === "blocked";
+            const isCopyrightChecking = book.copyrightStatus === "checking";
+            const disableCleanup = isCopyrightBlocked || isCopyrightChecking;
+
             return (
               <div
                 key={book._id}
@@ -270,35 +304,66 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                   <div className="space-y-2.5 text-sm">
                     <div className="flex items-center gap-2.5 text-white/80">
                       <User size={14} className="text-white/60" />
-                      <span className="line-clamp-1">{book.author || "Unknown author"}</span>
+                      <span className="line-clamp-1">
+                        {book.author || "Unknown author"}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2.5 text-white/80">
                       {getSourceIcon(book)}
-                      <span className="line-clamp-1 text-xs">{getSourceText(book)}</span>
+                      <span className="line-clamp-1 text-xs">
+                        {getSourceText(book)}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2.5 text-white/70">
                       <Calendar size={14} className="text-white/50" />
                       <span className="text-xs">
-                        {new Date(book.importedAt).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
+                        {new Date(book.importedAt).toLocaleDateString(
+                          undefined,
+                          {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          },
+                        )}
                       </span>
                     </div>
+
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-slate-900/35 px-2.5 py-2">
+                      <span className="text-[11px] uppercase tracking-wide text-white/60">
+                        Copyright
+                      </span>
+                      <CopyrightStatusBadge status={book.copyrightStatus} />
+                    </div>
+
+                    <div className="text-xs text-white/65">
+                      {book.copyrightPublicationYear
+                        ? `Publication year: ${book.copyrightPublicationYear}`
+                        : "Publication year: not detected"}
+                    </div>
+
+                    {isCopyrightBlocked && book.copyrightReason && (
+                      <p className="text-xs text-rose-300/90 line-clamp-2">
+                        {book.copyrightReason}
+                      </p>
+                    )}
                   </div>
 
                   {/* Cleanup Progress */}
                   {isCleaning && cleanupProgress && (
                     <div className="mt-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <Loader2 size={14} className="animate-spin text-indigo-400" />
-                        <span className="text-sm text-indigo-300">{cleanupProgress.label}</span>
+                        <Loader2
+                          size={14}
+                          className="animate-spin text-indigo-400"
+                        />
+                        <span className="text-sm text-indigo-300">
+                          {cleanupProgress.label}
+                        </span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-indigo-500 transition-all duration-500"
                           style={{ width: `${cleanupProgress.progress}%` }}
                         />
@@ -315,13 +380,29 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                     {book.status === "imported" && !isCleaning && (
                       <button
                         onClick={() => handleStartCleanup(book._id, book.title)}
-                        disabled={startingCleanupFor === book._id}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-indigo-300 border border-indigo-500/30 rounded-lg transition-all duration-200 text-sm font-medium group-hover:border-indigo-500/50"
+                        disabled={
+                          startingCleanupFor === book._id || disableCleanup
+                        }
+                        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed border rounded-lg transition-all duration-200 text-sm font-medium ${
+                          isCopyrightBlocked
+                            ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                            : "bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border-indigo-500/30 group-hover:border-indigo-500/50"
+                        }`}
                       >
                         {startingCleanupFor === book._id ? (
                           <>
                             <Loader2 size={14} className="animate-spin" />
                             Starting...
+                          </>
+                        ) : isCopyrightBlocked ? (
+                          <>
+                            <AlertTriangle size={14} />
+                            Blocked: Copyrighted
+                          </>
+                        ) : isCopyrightChecking ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Waiting for copyright scan
                           </>
                         ) : (
                           <>
@@ -333,24 +414,28 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                     )}
 
                     {/* Review button */}
-                    {(book.status === "cleaned" || book.status === "ready") && onEnterReview && (
-                      <button
-                        onClick={() => onEnterReview(book._id)}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg transition-all duration-200 text-sm font-medium group-hover:border-indigo-500/50"
-                      >
-                        {book.status === "ready" ? (
-                          <>
-                            <CheckCircle2 size={14} className="text-emerald-400" />
-                            Review (Approved)
-                          </>
-                        ) : (
-                          <>
-                            <Edit3 size={14} />
-                            Review Cleanup
-                          </>
-                        )}
-                      </button>
-                    )}
+                    {(book.status === "cleaned" || book.status === "ready") &&
+                      onEnterReview && (
+                        <button
+                          onClick={() => onEnterReview(book._id)}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg transition-all duration-200 text-sm font-medium group-hover:border-indigo-500/50"
+                        >
+                          {book.status === "ready" ? (
+                            <>
+                              <CheckCircle2
+                                size={14}
+                                className="text-emerald-400"
+                              />
+                              Review (Approved)
+                            </>
+                          ) : (
+                            <>
+                              <Edit3 size={14} />
+                              Review Cleanup
+                            </>
+                          )}
+                        </button>
+                      )}
 
                     {/* Processing state (when status hasn't updated yet but we know it's running) */}
                     {isCleaning && !cleanupProgress && (
@@ -385,9 +470,12 @@ export function LibraryPage({ onEnterReview }: LibraryPageProps) {
                 {showDeleteConfirm === book._id && (
                   <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-4 z-10">
                     <AlertTriangle className="text-rose-400 mb-3" size={32} />
-                    <h4 className="font-semibold text-white text-center mb-1">Delete Book?</h4>
+                    <h4 className="font-semibold text-white text-center mb-1">
+                      Delete Book?
+                    </h4>
                     <p className="text-sm text-white/70 text-center mb-4">
-                      This will permanently remove "{book.title}" and all associated cleanup data.
+                      This will permanently remove "{book.title}" and all
+                      associated cleanup data.
                     </p>
                     <div className="flex gap-2 w-full">
                       <button

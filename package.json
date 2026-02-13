@@ -9,11 +9,7 @@
     "dev:backend": "convex dev",
     "build": "vite build",
     "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && convex dev --once && vite build",
-    "discover:library": "tsx scripts/discover-library.ts",
-    "daemon:ingest": "tsx scripts/daemon/ingestDaemon.ts",
-    "daemon:install": "bash scripts/daemon/install-launchd.sh",
-    "daemon:uninstall": "bash scripts/daemon/uninstall-launchd.sh",
-    "test:ingest-local": "tsx --tsconfig tsconfig.test.json --test convex/__tests__/ingestSourcePolicy.test.ts convex/__tests__/ingestJobsTransitions.test.ts convex/__tests__/intakeQueueQualityMode.test.ts scripts/daemon/__tests__/localPathLayout.test.ts scripts/daemon/__tests__/epubExtract.test.ts scripts/daemon/__tests__/daemonLease.test.ts"
+    "discover:library": "tsx scripts/discover-library.ts"
   },
   "dependencies": {
     "@codemirror/merge": "^6.11.2",

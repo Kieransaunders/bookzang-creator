@@ -471,13 +471,5 @@
 
 ---
 
-## BookZang Local-First Ingestion Update (2026-02-13)
-
-- Convex retained for metadata/control plane only (jobs, status, pointers, audits).
-- Quality mode set as default ingest behavior for Gutenberg IDs.
-- Local daemon scaffolding added for lease-based ingest processing and stale lease recovery.
-- Local artifact contract standardized under `Library/epub/<id>/` and `Library/work/<id>/`.
-- EPUB inline semantics preservation markers implemented (`*emphasis*`, `{smallcaps:text}`) in extraction utilities.
-
-*Last updated: 2026-02-13*
+*Last updated: 2026-02-12*
 *Total revenue streams: 50+*

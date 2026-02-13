@@ -3,8 +3,6 @@ import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 
 const internalApi = internal as any;
-const ingestModeValidator = v.union(v.literal("quality"), v.literal("fast"));
-type IngestMode = "quality" | "fast";
 
 const findBookByGutenbergId = async (ctx: any, gutenbergId: string) => {
   return await ctx.db
@@ -24,7 +22,6 @@ const enqueueSharedIntake = async (
     author?: string;
     sourcePath?: string;
     candidateId?: string;
-    ingestMode?: IngestMode;
   },
 ) => {
   const now = Date.now();
@@ -53,17 +50,6 @@ const enqueueSharedIntake = async (
     discoveryCandidateId: args.candidateId as any,
   });
 
-  const ingestPayload = buildIngestJobPayload({
-    bookId,
-    gutenbergId: args.gutenbergId,
-    mode: args.ingestMode,
-    now,
-  });
-
-  const ingestJobId = ingestPayload
-    ? await ctx.db.insert("ingestJobs", ingestPayload)
-    : undefined;
-
   if (args.candidateId) {
     await ctx.db.patch(args.candidateId as any, {
       status: "queued",
@@ -88,35 +74,8 @@ const enqueueSharedIntake = async (
     },
   );
 
-  return { jobId, bookId, ingestJobId };
+  return { jobId, bookId };
 };
-
-export function buildIngestJobPayload(input: {
-  bookId: string;
-  gutenbergId?: string;
-  mode?: IngestMode;
-  now: number;
-}) {
-  if (!input.gutenbergId) {
-    return null;
-  }
-
-  const mode = input.mode ?? "quality";
-
-  return {
-    bookId: input.bookId as any,
-    gutenbergId: input.gutenbergId,
-    mode,
-    status: "queued" as const,
-    stage: mode === "quality" ? "awaiting_local_epub_resolution" : "awaiting_local_txt_ingest",
-    queuedAt: input.now,
-    updatedAt: input.now,
-    warning:
-      mode === "quality"
-        ? "Quality mode enabled: daemon will prefer EPUB when available."
-        : undefined,
-  };
-}
 
 export const enqueueUpload = mutation({
   args: {
@@ -127,7 +86,6 @@ export const enqueueUpload = mutation({
     title: v.optional(v.string()),
     author: v.optional(v.string()),
     overrideDuplicate: v.optional(v.boolean()),
-    ingestMode: v.optional(ingestModeValidator),
   },
   handler: async (ctx: any, args) => {
     if (args.gutenbergId) {
@@ -151,13 +109,11 @@ export const enqueueUpload = mutation({
       sourcePath: args.sourcePath,
       title: args.title,
       author: args.author,
-      ingestMode: args.ingestMode,
     });
 
     return {
       status: "enqueued" as const,
       duplicate: false,
-      ingestMode: args.ingestMode ?? "quality",
       ...enqueued,
     };
   },
@@ -269,7 +225,6 @@ export const enqueueDiscoveryCandidate = mutation({
   args: {
     candidateId: v.id("discoveryCandidates"),
     overrideDuplicate: v.optional(v.boolean()),
-    ingestMode: v.optional(ingestModeValidator),
   },
   handler: async (ctx: any, args) => {
     const candidate = await ctx.db.get(args.candidateId);
@@ -313,13 +268,11 @@ export const enqueueDiscoveryCandidate = mutation({
       title: candidate.title,
       author: candidate.author,
       candidateId: candidate._id as unknown as string,
-      ingestMode: args.ingestMode,
     });
 
     return {
       status: "enqueued" as const,
       duplicate: false,
-      ingestMode: args.ingestMode ?? "quality",
       candidateId: candidate._id,
       ...enqueued,
     };

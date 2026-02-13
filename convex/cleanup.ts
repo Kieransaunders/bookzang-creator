@@ -43,6 +43,12 @@ export const startCleanup = mutation({
       throw new Error(`Book ${args.bookId} has no file`);
     }
 
+    if (book.copyrightStatus === "blocked") {
+      throw new Error(
+        "Cleanup is blocked for this title because copyright scan marked it as in-copyright.",
+      );
+    }
+
     // Check for existing cleanup job
     const existingJob = await ctx.db
       .query("cleanupJobs")

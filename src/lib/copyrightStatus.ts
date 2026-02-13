@@ -50,11 +50,14 @@ export const getCopyrightStatusIcon = (status?: string) => {
 };
 
 export const COPYRIGHT_STATUS_DESCRIPTIONS: Record<string, string> = {
-  cleared: "All contributors died 100+ years ago. Safe to republish.",
-  checking: "Copyright research in progress...",
-  flagged: "Needs review. Unknown dates or contributors died <100 years ago.",
-  blocked: "In copyright. A contributor died <70 years ago.",
-  unknown: "Copyright status not yet researched.",
+  cleared:
+    "Header scan found no warnings and publication year appears safely old.",
+  checking: "Header copyright scan in progress.",
+  flagged:
+    "Potential risk detected. Review publication details before continuing.",
+  blocked:
+    "Header indicates in-copyright or restricted rights. Processing is blocked.",
+  unknown: "Copyright status has not been confirmed yet.",
 };
 
 export const getCopyrightStatusDescription = (status?: string) => {

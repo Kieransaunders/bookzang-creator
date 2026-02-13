@@ -18,7 +18,21 @@ export const list = query({
       );
     }
 
-    return books;
+    return await Promise.all(
+      books.map(async (book) => {
+        const check = await ctx.db
+          .query("copyrightChecks")
+          .withIndex("by_book_id", (q) => q.eq("bookId", book._id))
+          .first();
+
+        return {
+          ...book,
+          copyrightReason: check?.assessment?.reason,
+          copyrightPublicationYear: check?.headerAnalysis?.publicationYear,
+          copyrightWarnings: check?.headerAnalysis?.warningFlags,
+        };
+      }),
+    );
   },
 });
 
@@ -53,7 +67,6 @@ export const createFromFile = mutation({
     fileName: v.string(),
     gutenbergId: v.optional(v.string()),
     overrideDuplicate: v.optional(v.boolean()),
-    ingestMode: v.optional(v.union(v.literal("quality"), v.literal("fast"))),
   },
   handler: async (ctx: any, args): Promise<any> => {
     return await ctx.runMutation((api as any).intake.enqueueUpload, {
@@ -63,7 +76,6 @@ export const createFromFile = mutation({
       title: args.title,
       author: args.author,
       overrideDuplicate: args.overrideDuplicate,
-      ingestMode: args.ingestMode,
     });
   },
 });
@@ -137,7 +149,7 @@ export const getDownstreamReadiness = query({
     // Check if book has content
     const revisions = await ctx.db
       .query("cleanupRevisions")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .take(1);
 
     if (revisions.length === 0) {
@@ -164,7 +176,7 @@ export const listReadyBooks = query({
   handler: async (ctx, args) => {
     let books = await ctx.db
       .query("books")
-      .filter(q => q.eq(q.field("status"), "ready"))
+      .filter((q) => q.eq(q.field("status"), "ready"))
       .order("desc")
       .collect();
 
@@ -180,7 +192,6 @@ export const listReadyBooks = query({
     return books;
   },
 });
-
 
 /**
  * Delete a book and all associated cleanup data
@@ -216,8 +227,9 @@ export const deleteBook = mutation({
     let cleanupJobsDeleted = 0;
 
     // Delete cleanup originals
-    const originals = await ctx.db.query("cleanupOriginals")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const originals = await ctx.db
+      .query("cleanupOriginals")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const orig of originals) {
       await ctx.db.delete(orig._id);
@@ -225,8 +237,9 @@ export const deleteBook = mutation({
     }
 
     // Delete cleanup revisions (and their chapters)
-    const revisions = await ctx.db.query("cleanupRevisions")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const revisions = await ctx.db
+      .query("cleanupRevisions")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const rev of revisions) {
       await ctx.db.delete(rev._id);
@@ -234,8 +247,9 @@ export const deleteBook = mutation({
     }
 
     // Delete chapters
-    const chapters = await ctx.db.query("cleanupChapters")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const chapters = await ctx.db
+      .query("cleanupChapters")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const ch of chapters) {
       await ctx.db.delete(ch._id);
@@ -243,8 +257,9 @@ export const deleteBook = mutation({
     }
 
     // Delete flags
-    const flags = await ctx.db.query("cleanupFlags")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const flags = await ctx.db
+      .query("cleanupFlags")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const flag of flags) {
       await ctx.db.delete(flag._id);
@@ -252,8 +267,9 @@ export const deleteBook = mutation({
     }
 
     // Delete cleanup jobs
-    const cleanupJobs = await ctx.db.query("cleanupJobs")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const cleanupJobs = await ctx.db
+      .query("cleanupJobs")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const job of cleanupJobs) {
       await ctx.db.delete(job._id);
@@ -261,8 +277,9 @@ export const deleteBook = mutation({
     }
 
     // Delete main jobs
-    const jobs = await ctx.db.query("jobs")
-      .withIndex("by_book_id", q => q.eq("bookId", args.bookId))
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_book_id", (q) => q.eq("bookId", args.bookId))
       .collect();
     for (const job of jobs) {
       await ctx.db.delete(job._id);
