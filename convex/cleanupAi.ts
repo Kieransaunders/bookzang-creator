@@ -57,15 +57,27 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> =
       bookId: v.id("books"),
       revisionId: v.id("cleanupRevisions"),
       jobId: v.optional(v.id("cleanupJobs")),
+      modelOverride: v.optional(v.string()),
     },
     returns: v.object({
       success: v.boolean(),
       newRevisionId: v.optional(v.id("cleanupRevisions")),
       patchesApplied: v.optional(v.number()),
       lowConfidenceFlags: v.optional(v.number()),
+      requestedModel: v.optional(v.string()),
+      resolvedModel: v.optional(v.string()),
+      fallbackUsed: v.optional(v.boolean()),
+      chunkCount: v.optional(v.number()),
       error: v.optional(v.string()),
     }),
     handler: async (ctx, args) => {
+      // Telemetry tracking for this run (declared outside try for catch access)
+      const requestedModel = args.modelOverride?.trim() || "default";
+      let resolvedModel = requestedModel;
+      let fallbackUsed = false;
+      let segments: Array<{ text: string; startOffset: number }> = [];
+      const processingStartedAt = Date.now();
+
       try {
         // Update job status if provided
         if (args.jobId) {
@@ -117,8 +129,12 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> =
           },
         );
 
-        // Create AI client
-        const aiClient = createCleanupAiClient();
+        // Create AI client with optional model override
+        const aiClient = createCleanupAiClient(
+          args.modelOverride
+            ? { model: args.modelOverride }
+            : undefined
+        );
 
         if (!aiClient.isConfigured()) {
           console.log("AI client not configured, skipping AI cleanup pass");
@@ -127,12 +143,16 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> =
             success: true,
             patchesApplied: 0,
             lowConfidenceFlags: 0,
+            requestedModel,
+            resolvedModel,
+            fallbackUsed,
+            chunkCount: 0,
             error: "AI client not configured (KIMI_API_KEY not set)",
           };
         }
 
         // Split content into segments
-        const segments = splitIntoSegments(
+        segments = splitIntoSegments(
           content,
           AI_CLEANUP_CONFIG.MAX_SEGMENT_SIZE,
         );
@@ -293,6 +313,10 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> =
           success: true,
           patchesApplied: result.appliedCount,
           lowConfidenceFlags: result.flagsCreated,
+          requestedModel,
+          resolvedModel,
+          fallbackUsed,
+          chunkCount: segments.length,
         };
       } catch (error) {
         const errorMessage =
@@ -309,6 +333,10 @@ export const runCleanupAiPass: ReturnType<typeof internalAction> =
         return {
           success: false,
           error: errorMessage,
+          requestedModel,
+          resolvedModel,
+          fallbackUsed,
+          chunkCount: segments?.length ?? 0,
         };
       }
     },

@@ -12,6 +12,10 @@ import { Id } from "../../convex/_generated/dataModel";
 import { CleanupMergeEditor } from "./CleanupMergeEditor";
 import { CleanupFlagsPanel, type CleanupReviewFlag } from "./CleanupFlagsPanel";
 import { ApprovalChecklistDialog } from "./ApprovalChecklistDialog";
+import {
+  CleanupModelOverrideInput,
+  useModelOverride,
+} from "./CleanupModelOverrideInput";
 
 import {
   ArrowLeft,
@@ -80,6 +84,18 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
   const [inlineResolveError, setInlineResolveError] = useState<string | null>(
     null,
   );
+
+  // Model override for AI cleanup
+  const { modelOverride, setModelOverride, isValid: isModelValid } =
+    useModelOverride();
+
+  // AI processing result display
+  const [aiResult, setAiResult] = useState<{
+    requestedModel: string;
+    resolvedModel: string;
+    fallbackUsed: boolean;
+    chunkCount: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!reviewData?.original && !reviewData?.revision) return;
@@ -622,6 +638,65 @@ export function CleanupReviewPage({ bookId, onExit }: CleanupReviewPageProps) {
                     : `Resolve ${unresolvedCount} flag${unresolvedCount !== 1 ? "s" : ""} to enable approval.`}
               </p>
             </div>
+
+            {/* Model Override Input */}
+            {revision.isAiAssisted && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <CleanupModelOverrideInput
+                  value={modelOverride}
+                  onChange={setModelOverride}
+                  disabled={false}
+                />
+              </div>
+            )}
+
+            {/* AI Processing Result Alert */}
+            {aiResult && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div
+                  className={`p-3 rounded-lg text-sm ${
+                    aiResult.fallbackUsed
+                      ? "bg-yellow-500/10 border border-yellow-500/30"
+                      : "bg-blue-500/10 border border-blue-500/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {aiResult.fallbackUsed ? (
+                      <AlertCircle size={14} className="text-yellow-400" />
+                    ) : (
+                      <CheckCircle size={14} className="text-blue-400" />
+                    )}
+                    <span
+                      className={`font-medium ${
+                        aiResult.fallbackUsed
+                          ? "text-yellow-300"
+                          : "text-blue-300"
+                      }`}
+                    >
+                      AI Processing Complete
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-slate-400">
+                    <p>
+                      <span className="text-slate-500">Model used:</span>{" "}
+                      <span className="text-slate-200 font-mono text-xs">
+                        {aiResult.resolvedModel}
+                      </span>
+                    </p>
+                    {aiResult.fallbackUsed && (
+                      <p className="text-yellow-400/80 text-xs flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        Fallback activated
+                      </p>
+                    )}
+                    <p>
+                      <span className="text-slate-500">Chunks processed:</span>{" "}
+                      <span className="text-slate-200">{aiResult.chunkCount}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
